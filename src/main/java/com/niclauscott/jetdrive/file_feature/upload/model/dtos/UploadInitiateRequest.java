@@ -6,4 +6,6 @@ import lombok.Data;
 public class UploadInitiateRequest {
     private String fileName;
     private long fileSize;
+    private String parentId;
+    private boolean hasThumbnail = false;
 }

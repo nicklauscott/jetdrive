@@ -20,6 +20,9 @@ public class UploadSession {
     @Column(name = "user_id", nullable = false)
     private UUID UserId;
 
+    @Column(name = "parent_id")
+    private String parentId;
+
     @Column(name = "file_name")
     private String fileName;
 
@@ -28,6 +31,12 @@ public class UploadSession {
 
     @Column(name = "uploaded_size", nullable = false)
     private Long uploadedSize = 0L;
+
+    @Column(name = "has_thumbnail")
+    private boolean hasThumbnail = false;
+
+    @Column(name = "thumbnail_path")
+    private String thumbnailPath;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")

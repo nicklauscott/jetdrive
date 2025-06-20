@@ -1,5 +1,6 @@
 package com.niclauscott.jetdrive.file_feature.upload.controller;
 
+import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileNodeDTO;
 import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadInitiateRequest;
 import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadInitiateResponse;
 import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadProgressResponse;
@@ -26,20 +27,18 @@ public class UploadController {
     public ResponseEntity<UploadInitiateResponse> initiateUpload(
             @RequestBody UploadInitiateRequest request
     ) {
-        UploadInitiateResponse response = service.initiateUpload(request.getFileName(), request.getFileSize());
+        UploadInitiateResponse response = service.initiateUpload(request);
         return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{uploadId}")
-    public ResponseEntity<Void> uploadChunk(
+    public ResponseEntity<UploadProgressResponse> uploadChunk(
             @PathVariable("uploadId")UUID uploadId,
             @RequestHeader("Content-Range") String contentRange,
             HttpServletRequest request
     ) throws IOException {
-        log.info("Temp directory resolved to: {} -> uploadChunk", uploadId);
-
-        service.handleChunks(uploadId, contentRange, request.getInputStream());
-        return ResponseEntity.ok().build();
+        UploadProgressResponse response = service.handleChunks(uploadId, contentRange, request.getInputStream());
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/status/{uploadId}")
@@ -50,8 +49,7 @@ public class UploadController {
     }
 
     @PostMapping("/{uploadId}/complete")
-    public  ResponseEntity<Void> completeUpload(@PathVariable("uploadId") UUID uploadId) throws IOException {
-        service.completeUpload(uploadId);
-        return ResponseEntity.ok().build();
+    public  ResponseEntity<FileNodeDTO> completeUpload(@PathVariable("uploadId") UUID uploadId) throws IOException {
+        return ResponseEntity.ok(service.completeUpload(uploadId));
     }
 }

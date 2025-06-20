@@ -16,7 +16,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
-
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -58,6 +57,26 @@ public class FileNodeService {
         return Optional.of(new FileNodeTreeResponse(parentId, maxUpdated, dtoList));
     }
 
+    public FileNodeDTO createFileNode(
+            String name, String type, String parentId, long size,
+            String storagePath, String mimeType,
+            boolean hasThumbnail, String thumbnailPath
+    ) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
+        FileNode fileNode = new FileNode();
+        fileNode.setUserId(userPrincipal.getUserId());
+        if (parentId != null) fileNode.setParentId(UUID.fromString(parentId));
+        fileNode.setName(name);
+        fileNode.setType(type);
+        fileNode.setMimeType(mimeType);
+        fileNode.setSize(size);
+        fileNode.setStoragePath(storagePath);
+        fileNode.setHasThumbnail(hasThumbnail);
+        if (thumbnailPath != null) fileNode.setThumbnailPath(thumbnailPath);
+        return FileNodeMapper.toDTO(repository.save(fileNode));
+    }
+
 }
 
 @Slf4j
@@ -79,18 +98,23 @@ class Cml implements CommandLineRunner {
         user.setAuthType("password");
         userRepository.save(user);
 
+        //loadFileNodes(user.getId());
+
+    }
+
+    private void loadFileNodes(UUID userId) {
         List<FileNode> fileNodes = List.of(1,2,3,4,5).stream().map(i ->
-                newFile("folder", "folder " + i, null, user.getId())).toList();
+                newFile("folder", "folder " + i, null, userId)).toList();
         fileNodes.forEach(repository::save);
 
         for (FileNode fileNode: repository.findAll()) {
             for (int i = 0; i < random.nextInt(25); i++) {
                 String typeAndName = (i + random.nextInt() % 2 == 0) ? "folder" : "file";
-                FileNode file = newFile(typeAndName, typeAndName + i, fileNode.getId(), user.getId());
+                FileNode file = newFile(typeAndName, typeAndName + i, fileNode.getId(), userId);
                 repository.save(file);
                 if (typeAndName.equals("folder")) {
                     for (int j = 0; j < random.nextInt(5); j++) {
-                        FileNode fil = newFile("file", typeAndName + i + j, file.getId(), user.getId());
+                        FileNode fil = newFile("file", typeAndName + i + j, file.getId(), userId);
                         repository.save(fil);
                     }
                 }

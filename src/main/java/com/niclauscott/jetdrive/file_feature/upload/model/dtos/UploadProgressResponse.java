@@ -8,5 +8,7 @@ import java.util.Set;
 @AllArgsConstructor
 public class UploadProgressResponse {
     private Set<Long> uploadedChunks;
-    private long getTotalBytes;
+    private long totalBytes;
+    private long uploadedBytes;
+    private int chunkSize;
 }

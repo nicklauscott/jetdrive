@@ -1,9 +1,12 @@
 package com.niclauscott.jetdrive.file_feature.upload.service;
 
 import com.niclauscott.jetdrive.common.model.UserPrincipal;
+import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileNodeDTO;
+import com.niclauscott.jetdrive.file_feature.file.service.FileNodeService;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UncompletedUploadException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UploadNotSupportedException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UploadSessionNotFoundException;
+import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadInitiateRequest;
 import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadInitiateResponse;
 import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadProgressResponse;
 import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadSession;
@@ -28,21 +31,23 @@ import java.util.regex.Pattern;
 public class UploadService {
 
     private final UploadSessionRepository sessionRepository;
+    private final FileNodeService fileNodeService;
 
     private final Path baseTempDir = Paths.get("uploads/temp");
     private final Path baseFinalDir = Paths.get("uploads/complete");
-    private final int chunkSize = 1 * 1024 * 1024;
+    private final int chunkSize = 1024 * 1024;
 
     @Transactional
-    public UploadInitiateResponse initiateUpload(
-            String fileName, long totalSize
-    ) {
+    public UploadInitiateResponse initiateUpload(UploadInitiateRequest request) {
         // Save session to DB
-        UploadSession session = saveUploadSession(fileName, totalSize);
+        UploadSession session = saveUploadSession(
+                request.getFileName(), request.getFileSize(),
+                request.getParentId(), request.isHasThumbnail()
+        );
         return new UploadInitiateResponse(session.getId(), chunkSize);
     }
 
-    public void handleChunks(
+    public UploadProgressResponse handleChunks(
             UUID uploadId, String contentRange, InputStream inputStream
     ) throws IOException {
         // Verify that file uploadSession exist and hasn't been completed
@@ -60,7 +65,7 @@ public class UploadService {
 
         if (session.getUploadedChunks().contains(range.start)) {
             log.info("Skipping already uploaded chunk: {}", chunkFile.getFileName());
-            return; // Skip already uploaded chunk
+            return getUploadProgress(uploadId);
         }
 
         long writtenBytes;
@@ -74,9 +79,10 @@ public class UploadService {
         session.setLastUpdatedAt(LocalDateTime.now());
 
         sessionRepository.save(session);
+        return getUploadProgress(uploadId);
     }
 
-    public void completeUpload(UUID uploadId) throws IOException {
+    public FileNodeDTO completeUpload(UUID uploadId) throws IOException {
         UploadSession session = sessionRepository.findById(uploadId).orElseThrow(() ->
                 new UploadSessionNotFoundException("No session with upload id found"));
 
@@ -112,6 +118,11 @@ public class UploadService {
 
         updateSession(uploadId, UploadStatus.COMPLETED);
         deleteDirectory(tempDir);
+        String mimeType = getFileExtension(session.getFileName());
+        return fileNodeService.createFileNode(
+                session.getFileName(), "file", session.getParentId(), session.getTotalSize(),
+                String.valueOf(finalFile.toAbsolutePath()), mimeType, session.isHasThumbnail(), session.getThumbnailPath()
+        );
     }
 
     private void deleteDirectory(Path dir) throws IOException {
@@ -138,15 +149,19 @@ public class UploadService {
         return new Range(start, end);
     }
 
-    private UploadSession saveUploadSession(String fileName, long totalSize) {
+    private UploadSession saveUploadSession(
+            String fileName, long totalSize,
+            String parentId, boolean hasThumbnail
+    ) {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
 
         UploadSession uploadSession = new UploadSession();
         uploadSession.setUserId(userPrincipal.getUserId());
-
+        uploadSession.setParentId(parentId);
         uploadSession.setTotalSize(totalSize);
         uploadSession.setFileName(fileName);
+        uploadSession.setHasThumbnail(hasThumbnail);
         uploadSession.setStatus(UploadStatus.IN_PROGRESS);
         return sessionRepository.save(uploadSession);
     }
@@ -155,7 +170,21 @@ public class UploadService {
         UploadSession session = sessionRepository.findById(uploadId).orElseThrow(() ->
                 new UploadSessionNotFoundException("No session with upload id found"));
 
-        return new UploadProgressResponse(session.getUploadedChunks(), session.getTotalSize());
+        long uploadedBytes = session.getUploadedChunks().stream()
+                .mapToLong(start -> {
+                    long end = Math.min(start + chunkSize, session.getTotalSize());
+                    return end - start;
+                }).sum();
+
+        return new UploadProgressResponse(
+                session.getUploadedChunks(), session.getTotalSize(),
+                uploadedBytes, chunkSize
+        );
+    }
+
+    private String getFileExtension(String fileName) {
+        int lastDot = fileName.lastIndexOf(".");
+        return lastDot == -1 ? "" : fileName.substring(lastDot + 1);
     }
 
     private record Range(long start, long end) {}
