@@ -1,9 +1,11 @@
 package com.niclauscott.jetdrive.file_feature.upload.service;
 
 import com.niclauscott.jetdrive.common.model.UserPrincipal;
+import com.niclauscott.jetdrive.file_feature.upload.exception.UncompletedUploadException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UploadNotSupportedException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UploadSessionNotFoundException;
 import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadInitiateResponse;
+import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadProgressResponse;
 import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadSession;
 import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadStatus;
 import com.niclauscott.jetdrive.file_feature.upload.repository.UploadSessionRepository;
@@ -14,7 +16,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import java.io.*;
 import java.nio.file.*;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.UUID;
@@ -53,11 +54,14 @@ public class UploadService {
         }
 
         Range range = parseContentRange(contentRange);
-
         Path tempDir = baseTempDir.resolve(uploadId.toString());
         Files.createDirectories(tempDir);
-
         Path chunkFile = tempDir.resolve(range.start + ".part");
+
+        if (session.getUploadedChunks().contains(range.start)) {
+            log.info("Skipping already uploaded chunk: {}", chunkFile.getFileName());
+            return; // Skip already uploaded chunk
+        }
 
         long writtenBytes;
         try (OutputStream out = Files.newOutputStream(chunkFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
@@ -66,6 +70,7 @@ public class UploadService {
 
         long newUploaded = session.getUploadedSize() + writtenBytes;
         session.setUploadedSize(newUploaded);
+        session.getUploadedChunks().add(range.start);
         session.setLastUpdatedAt(LocalDateTime.now());
 
         sessionRepository.save(session);
@@ -79,12 +84,20 @@ public class UploadService {
             throw new UploadNotSupportedException("Upload already completed");
         }
 
+        if (session.getUploadedSize() < session.getTotalSize()) {
+            throw new UncompletedUploadException("Missing part of the file");
+        }
+
         Path tempDir = baseTempDir.resolve(uploadId.toString());
         Path finalFile = baseFinalDir.resolve(session.getFileName());
 
         Files.createDirectories(finalFile.getParent());
 
+
         try(OutputStream output = Files.newOutputStream(finalFile, StandardOpenOption.CREATE)) {
+            if (!Files.exists(tempDir)) {
+                throw new IllegalStateException("No chunks uploaded yet.");
+            }
             Files.list(tempDir)
                     .sorted(Comparator.comparingLong(f ->
                             Long.parseLong(f.getFileName().toString().split("\\.")[0])))
@@ -131,10 +144,18 @@ public class UploadService {
 
         UploadSession uploadSession = new UploadSession();
         uploadSession.setUserId(userPrincipal.getUserId());
+
         uploadSession.setTotalSize(totalSize);
         uploadSession.setFileName(fileName);
         uploadSession.setStatus(UploadStatus.IN_PROGRESS);
         return sessionRepository.save(uploadSession);
+    }
+
+    public UploadProgressResponse getUploadProgress(UUID uploadId) {
+        UploadSession session = sessionRepository.findById(uploadId).orElseThrow(() ->
+                new UploadSessionNotFoundException("No session with upload id found"));
+
+        return new UploadProgressResponse(session.getUploadedChunks(), session.getTotalSize());
     }
 
     private record Range(long start, long end) {}

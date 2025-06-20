@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -30,6 +32,10 @@ public class UploadSession {
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     private UploadStatus status;
+
+    @ElementCollection
+    @Column(name = "uploaded_chunks")
+    private Set<Long> uploadedChunks = new HashSet<>();
 
     @Column(name = "last_updated_at")
     private LocalDateTime lastUpdatedAt = LocalDateTime.now();

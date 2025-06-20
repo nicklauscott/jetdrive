@@ -2,6 +2,7 @@ package com.niclauscott.jetdrive.file_feature.upload.controller;
 
 import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadInitiateRequest;
 import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadInitiateResponse;
+import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadProgressResponse;
 import com.niclauscott.jetdrive.file_feature.upload.service.UploadService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -39,6 +40,13 @@ public class UploadController {
 
         service.handleChunks(uploadId, contentRange, request.getInputStream());
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/status/{uploadId}")
+    public UploadProgressResponse getUploadProgress(
+            @PathVariable("uploadId")UUID uploadId
+    ) {
+        return service.getUploadProgress(uploadId);
     }
 
     @PostMapping("/{uploadId}/complete")
