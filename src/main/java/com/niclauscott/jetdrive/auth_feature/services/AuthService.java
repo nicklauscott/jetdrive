@@ -4,7 +4,7 @@ import com.niclauscott.jetdrive.auth_feature.exception.InvalidOrExpiredTokenExce
 import com.niclauscott.jetdrive.auth_feature.model.dtos.*;
 import com.niclauscott.jetdrive.auth_feature.model.entities.RefreshToken;
 import com.niclauscott.jetdrive.auth_feature.repository.RefreshTokenRepository;
-import com.niclauscott.jetdrive.common.exception.BadCredentialsException;
+import com.niclauscott.jetdrive.auth_feature.exception.BadCredentialsException;
 import com.niclauscott.jetdrive.common.model.dtos.*;
 import com.niclauscott.jetdrive.user_feature.model.entities.User;
 import com.niclauscott.jetdrive.user_feature.service.UserService;
@@ -49,6 +49,9 @@ public class AuthService {
     public TokenPairResponseDTO login(@Valid LoginRequestDTO requestDTO) {
        User user = userService.getUserByEmail(requestDTO.getEmail()).orElseThrow(() ->
                  new BadCredentialsException("Bad credentials! check your email and password"));
+
+       if (!user.getAuthType().equals("password"))
+           throw new BadCredentialsException("Bad credentials! check your email and password");
 
        if (!passwordEncoder.matches(requestDTO.getPassword(), user.getPasswordHash()))
            throw new BadCredentialsException("Bad credentials! check your email and password");

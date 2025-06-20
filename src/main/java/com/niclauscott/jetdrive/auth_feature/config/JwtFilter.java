@@ -1,5 +1,6 @@
 package com.niclauscott.jetdrive.auth_feature.config;
 
+import com.niclauscott.jetdrive.auth_feature.exception.InvalidOrExpiredTokenException;
 import com.niclauscott.jetdrive.auth_feature.services.JwtService;
 import com.niclauscott.jetdrive.common.model.UserPrincipal;
 import com.niclauscott.jetdrive.user_feature.model.entities.User;
@@ -40,7 +41,16 @@ public class JwtFilter extends OncePerRequestFilter {
         }
 
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
-        if (authHeader == null || !authHeader.startsWith("Bearer ") || !jwtService.validateAccessToken(authHeader)) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+            response.setContentType("application/json");
+            response.getWriter().write("{\"message\": \"You need to be authenticated to use this feature\"}");
+            return;
+        }
+
+        try {
+            jwtService.validateAccessToken(authHeader);
+        } catch (InvalidOrExpiredTokenException e) {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType("application/json");
             response.getWriter().write("{\"message\": \"You need to be authenticated to use this feature\"}");
