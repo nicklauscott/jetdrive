@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @AllArgsConstructor
 public class FileNodeService {
@@ -32,8 +33,8 @@ public class FileNodeService {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
 
-        List<FileNode> children = repository.findByUserIdAndParentIdIsNull(userPrincipal.getUserId());
-        List<FileNodeDTO> dtoList = children.stream().map(FileNodeMapper::toDTO).toList();
+        List<FileNode> rootFiles = repository.findByUserIdAndParentIdIsNull(userPrincipal.getUserId());
+        List<FileNodeDTO> dtoList = rootFiles.stream().map(FileNodeMapper::toDTO).toList();
 
         return Optional.of(new FileNodeTreeResponse(null, null, dtoList));
     }
@@ -74,6 +75,7 @@ public class FileNodeService {
         fileNode.setStoragePath(storagePath);
         fileNode.setHasThumbnail(hasThumbnail);
         if (thumbnailPath != null) fileNode.setThumbnailPath(thumbnailPath);
+        log.info("--------------------- StoragePath: {}", storagePath);
         return FileNodeMapper.toDTO(repository.save(fileNode));
     }
 

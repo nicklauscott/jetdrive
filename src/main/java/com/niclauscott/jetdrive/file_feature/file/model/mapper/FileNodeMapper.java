@@ -9,10 +9,12 @@ public class FileNodeMapper {
         dto.setId(fileNode.getId());
         dto.setName(fileNode.getName());
         dto.setType(fileNode.getType());
+        dto.setSize(fileNode.getSize());
         dto.setParentId(fileNode.getParentId());
         dto.setHasThumbnail(fileNode.getHasThumbnail());
         dto.setMimeType(fileNode.getMimeType());
         dto.setUpdatedAt(fileNode.getUpdatedAt());
+        dto.setCreatedAt(fileNode.getCreatedAt());
         return dto;
     }
 }

@@ -4,9 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 @Entity
 @Table(name = "upload_sessions")
@@ -42,9 +40,21 @@ public class UploadSession {
     @Column(name = "status")
     private UploadStatus status;
 
+    @Column(name = "object_key")
+    private String objectKey;
+
+    @Column(name = "minio_upload_id")
+    private String minioUploadId;
+
     @ElementCollection
     @Column(name = "uploaded_chunks")
     private Set<Long> uploadedChunks = new HashSet<>();
+
+    @ElementCollection
+    @CollectionTable(name = "upload_parts", joinColumns = @JoinColumn(name = "session_id"))
+    @MapKeyColumn(name = "part_number")
+    @Column(name = "etag")
+    private Map<Integer, String> uploadedParts = new HashMap<>();
 
     @Column(name = "last_updated_at")
     private LocalDateTime lastUpdatedAt = LocalDateTime.now();

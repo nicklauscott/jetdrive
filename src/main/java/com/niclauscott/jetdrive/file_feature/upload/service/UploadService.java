@@ -55,7 +55,7 @@ public class UploadService {
                 new UploadSessionNotFoundException("No session with upload id found"));
 
         if (session.getStatus().equals(UploadStatus.CANCELLED) || session.getStatus().equals(UploadStatus.COMPLETED)) {
-            throw new UploadNotSupportedException("Can resume upload");
+            throw new UploadNotSupportedException("Can't resume upload");
         }
 
         Range range = parseContentRange(contentRange);
