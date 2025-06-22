@@ -21,3 +21,7 @@ spring:
 
 jwt:
   secret: {JWT_SECRET_V2_BASE64}
+
+#logging:
+#  level:
+#   root: INFO

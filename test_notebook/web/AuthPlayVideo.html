@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Authenticated Video Player</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .video-container {
+            position: relative;
+            margin: 20px 0;
+        }
+        video {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 0 10px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🎬 Authenticated Video Player</h1>
+
+    <div class="video-container">
+        <video id="video" controls preload="none">
+            Your browser does not support the video tag.
+        </video>
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            Loading video...
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="loadBtn" onclick="loadVideo()">Load Video</button>
+        <button id="refreshBtn" onclick="refreshToken()" disabled>Refresh Token</button>
+    </div>
+
+    <div id="status" class="status"></div>
+</div>
+
+<script>
+    const videoElement = document.getElementById('video');
+    const loadingDiv = document.getElementById('loading');
+    const statusDiv = document.getElementById('status');
+    const loadBtn = document.getElementById('loadBtn');
+
+    // Configuration
+    const config = {
+        videoUrl: 'http://localhost:8080/files/download/18b12309-0727-420c-92bf-439ecafac930',
+        authToken: 'eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwic3ViIjoiaW5mb0BhYmMuY29tIiwiaWF0IjoxNzUwNTA1MjkxLCJleHAiOjE3NTA1OTE2OTF9.CIE72XtdfVIFubzVRv7Ui8MSQ6-lnhYAwa2_uDAM2v0'
+    };
+
+    function showStatus(message, type = 'info') {
+        statusDiv.textContent = message;
+        statusDiv.className = `status ${type}`;
+        statusDiv.style.display = 'block';
+
+        // Auto-hide success messages after 3 seconds
+        if (type === 'success') {
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
+        }
+    }
+
+    function showLoading(show = true) {
+        loadingDiv.style.display = show ? 'block' : 'none';
+        loadBtn.disabled = show;
+    }
+
+    async function loadVideo() {
+        showLoading(true);
+        showStatus('Fetching video from server...', 'info');
+
+        try {
+            const response = await fetch(config.videoUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${config.authToken}`,
+                    'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+            }
+
+            const contentLength = response.headers.get('content-length');
+            const contentType = response.headers.get('content-type');
+
+            showStatus(`Downloading ${contentLength ? Math.round(contentLength/1024/1024) + 'MB' : 'video'}...`, 'info');
+
+            const blob = await response.blob();
+
+            // Clean up any existing blob URL
+            if (videoElement.src && videoElement.src.startsWith('blob:')) {
+                URL.revokeObjectURL(videoElement.src);
+            }
+
+            // Create new blob URL and set as video source
+            const blobUrl = URL.createObjectURL(blob);
+            videoElement.src = blobUrl;
+            videoElement.load();
+
+            showStatus(`Video loaded successfully! (${Math.round(blob.size/1024/1024)}MB, ${contentType || 'video'})`, 'success');
+
+        } catch (error) {
+            console.error('Video loading error:', error);
+
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                showStatus('Network error: Unable to connect to server. Check if backend is running.', 'error');
+            } else if (error.message.includes('401')) {
+                showStatus('Authentication failed: Token may be expired or invalid.', 'error');
+            } else if (error.message.includes('403')) {
+                showStatus('Access denied: Insufficient permissions.', 'error');
+            } else if (error.message.includes('404')) {
+                showStatus('Video not found: The requested video does not exist.', 'error');
+            } else {
+                showStatus(`Error loading video: ${error.message}`, 'error');
+            }
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    function refreshToken() {
+        showStatus('Token refresh not implemented. Please update the token in the code.', 'info');
+    }
+
+    // Video event listeners
+    videoElement.addEventListener('loadstart', () => {
+        console.log('Video load started');
+    });
+
+    videoElement.addEventListener('loadedmetadata', () => {
+        console.log('Video metadata loaded');
+        const duration = Math.round(videoElement.duration);
+        const minutes = Math.floor(duration / 60);
+        const seconds = duration % 60;
+        showStatus(`Video ready to play (${minutes}:${seconds.toString().padStart(2, '0')})`, 'success');
+    });
+
+    videoElement.addEventListener('error', (e) => {
+        const error = videoElement.error;
+        let errorMessage = 'Unknown video error';
+
+        if (error) {
+            switch (error.code) {
+                case 1: errorMessage = 'Video loading aborted'; break;
+                case 2: errorMessage = 'Network error while loading video'; break;
+                case 3: errorMessage = 'Video format not supported'; break;
+                case 4: errorMessage = 'Video source not available'; break;
+            }
+        }
+
+        showStatus(`Video error: ${errorMessage}`, 'error');
+        showLoading(false);
+    });
+
+    // Clean up blob URLs when page unloads
+    window.addEventListener('beforeunload', () => {
+        if (videoElement.src && videoElement.src.startsWith('blob:')) {
+            URL.revokeObjectURL(videoElement.src);
+        }
+    });
+
+    // Auto-load video on page load (optional)
+    // window.addEventListener('load', loadVideo);
+</script>
+</body>
+</html>

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Stream Video with Auth Header - Debug Version</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .error { background: #ffe6e6; color: #cc0000; }
+        .success { background: #e6ffe6; color: #006600; }
+        .info { background: #e6f3ff; color: #0066cc; }
+    </style>
+</head>
+<body>
+<h1>Authenticated Video Stream - Debug Version</h1>
+
+<div id="debugLog" class="debug">
+    <h3>Debug Log:</h3>
+    <div id="logMessages"></div>
+</div>
+
+<video id="video" controls width="640" height="360"></video>
+
+<button onclick="startStream()">Start Stream</button>
+<button onclick="testFetch()">Test Direct Fetch</button>
+<button onclick="simpleVideoLoad()">Simple Video Load</button>
+
+<script>
+    const videoElement = document.getElementById('video');
+    const videoUrl = 'http://localhost:8080/files/download/18b12309-0727-420c-92bf-439ecafac930';
+    const authToken = 'eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwic3ViIjoiaW5mb0BhYmMuY29tIiwiaWF0IjoxNzUwNTA1MjkxLCJleHAiOjE3NTA1OTE2OTF9.CIE72XtdfVIFubzVRv7Ui8MSQ6-lnhYAwa2_uDAM2v0';
+
+    function log(message, type = 'info') {
+        const logDiv = document.getElementById('logMessages');
+        const timestamp = new Date().toLocaleTimeString();
+        const logEntry = document.createElement('div');
+        logEntry.className = type;
+        logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+        logDiv.appendChild(logEntry);
+        console.log(`[${timestamp}] ${message}`);
+    }
+
+    function testFetch() {
+        log('Testing direct fetch to backend...', 'info');
+
+        // Try with no-cors mode first for testing
+        fetch(videoUrl, {
+            method: 'GET',
+            mode: 'no-cors', // This bypasses CORS but limits response access
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8'
+            }
+        })
+        .then(response => {
+            log(`Response status: ${response.status} ${response.statusText}`,
+                response.ok ? 'success' : 'error');
+            log(`Response headers: ${JSON.stringify([...response.headers.entries()])}`, 'info');
+            return response.ok ? response.blob() : Promise.reject(response);
+        })
+        .then(blob => {
+            log(`Received blob of size: ${blob.size} bytes, type: ${blob.type}`, 'success');
+            // Create a simple blob URL for testing
+            const blobUrl = URL.createObjectURL(blob);
+            videoElement.src = blobUrl;
+            log('Video source set to blob URL', 'success');
+        })
+        .catch(err => {
+            log(`Fetch error: ${err.message || err.status || err}`, 'error');
+        });
+    }
+
+    function startStream() {
+        log('Starting MediaSource streaming...', 'info');
+
+        if (!window.MediaSource) {
+            log('MediaSource API is not supported in this browser.', 'error');
+            return;
+        }
+
+        const mediaSource = new MediaSource();
+        videoElement.src = URL.createObjectURL(mediaSource);
+        log('MediaSource created and attached to video element', 'info');
+
+        mediaSource.addEventListener('sourceopen', () => {
+            log('MediaSource opened', 'success');
+
+            try {
+                // Try multiple codec variations
+                const codecs = [
+                    'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
+                    'video/mp4; codecs="avc1.64001F, mp4a.40.2"',
+                    'video/mp4; codecs="avc1.4D401F, mp4a.40.2"',
+                    'video/mp4'
+                ];
+
+                let mimeCodec = null;
+                for (const codec of codecs) {
+                    if (MediaSource.isTypeSupported(codec)) {
+                        mimeCodec = codec;
+                        log(`Using supported codec: ${codec}`, 'success');
+                        break;
+                    }
+                }
+
+                if (!mimeCodec) {
+                    log('No supported codec found', 'error');
+                    return;
+                }
+
+                const sourceBuffer = mediaSource.addSourceBuffer(mimeCodec);
+                log('Source buffer created successfully', 'success');
+
+                log('Making fetch request to backend...', 'info');
+                fetch(videoUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8'
+                    }
+                })
+                .then(response => {
+                    log(`Fetch response: ${response.status} ${response.statusText}`,
+                        response.ok ? 'success' : 'error');
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    log(`Content-Length: ${response.headers.get('content-length')}`, 'info');
+                    log(`Content-Type: ${response.headers.get('content-type')}`, 'info');
+
+                    return response.arrayBuffer();
+                })
+                .then(data => {
+                    log(`Received ${data.byteLength} bytes of video data`, 'success');
+
+                    sourceBuffer.addEventListener('updateend', () => {
+                        log('Source buffer update completed', 'success');
+                        if (!sourceBuffer.updating && mediaSource.readyState === 'open') {
+                            mediaSource.endOfStream();
+                            log('MediaSource stream ended', 'success');
+                        }
+                    });
+
+                    sourceBuffer.addEventListener('error', (e) => {
+                        log(`Source buffer error: ${e.type}`, 'error');
+                        log(`Source buffer state: updating=${sourceBuffer.updating}, buffered=${sourceBuffer.buffered.length}`, 'error');
+                        log(`MediaSource readyState: ${mediaSource.readyState}`, 'error');
+                        if (sourceBuffer.error) {
+                            log(`Buffer error code: ${sourceBuffer.error.code}, message: ${sourceBuffer.error.message}`, 'error');
+                        }
+                    });
+
+                    if (data.byteLength > 0) {
+                        // Check if this looks like valid MP4 data
+                        const header = new Uint8Array(data.slice(0, 12));
+                        const headerHex = Array.from(header).map(b => b.toString(16).padStart(2, '0')).join(' ');
+                        log(`First 12 bytes (hex): ${headerHex}`, 'info');
+
+                        // Check for common MP4 signatures
+                        const headerStr = new TextDecoder().decode(header.slice(4, 12));
+                        log(`File type signature: ${headerStr}`, 'info');
+
+                        try {
+                            sourceBuffer.appendBuffer(data);
+                            log('Data appended to source buffer', 'info');
+                        } catch (appendError) {
+                            log(`Failed to append buffer: ${appendError.message}`, 'error');
+                            log(`Buffer quota exceeded: ${appendError.name === 'QuotaExceededError'}`, 'error');
+                        }
+                    } else {
+                        log('Received empty data buffer', 'error');
+                    }
+                })
+                .catch(err => {
+                    log(`Streaming error: ${err.message}`, 'error');
+                    if (mediaSource.readyState === 'open') {
+                        mediaSource.endOfStream('network');
+                    }
+                });
+
+            } catch (e) {
+                log(`MediaSource setup error: ${e.message}`, 'error');
+            }
+        });
+
+        mediaSource.addEventListener('sourceended', () => {
+            log('MediaSource ended', 'info');
+        });
+
+        mediaSource.addEventListener('error', (e) => {
+            log(`MediaSource error: ${e}`, 'error');
+        });
+    }
+
+    // Check browser capabilities on load
+    window.addEventListener('load', () => {
+        log('Page loaded, checking browser capabilities...', 'info');
+        log(`MediaSource supported: ${!!window.MediaSource}`, 'info');
+        log(`Fetch API supported: ${!!window.fetch}`, 'info');
+
+        if (window.MediaSource) {
+            const codecs = [
+                'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
+                'video/mp4; codecs="avc1.64001F, mp4a.40.2"',
+                'video/mp4; codecs="avc1.4D401F, mp4a.40.2"'
+            ];
+
+            codecs.forEach(codec => {
+                log(`Codec ${codec} supported: ${MediaSource.isTypeSupported(codec)}`, 'info');
+            });
+        }
+
+        log('Ready to test. Click "Test Direct Fetch" first to verify backend connection.', 'info');
+    });
+
+    function simpleVideoLoad() {
+        log('Trying simple video load approach...', 'info');
+
+        // Create a custom fetch with auth headers
+        fetch(videoUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            log(`Creating blob URL for ${blob.size} bytes of ${blob.type}`, 'success');
+            const blobUrl = URL.createObjectURL(blob);
+
+            // Set video source directly
+            videoElement.src = blobUrl;
+            videoElement.load();
+
+            videoElement.addEventListener('loadstart', () => log('Video load started', 'info'));
+            videoElement.addEventListener('loadedmetadata', () => log('Video metadata loaded', 'success'));
+            videoElement.addEventListener('canplay', () => log('Video can start playing', 'success'));
+            videoElement.addEventListener('error', (e) => log(`Video error: ${e.message}`, 'error'));
+
+            log('Blob URL set as video source', 'success');
+        })
+        .catch(err => {
+            log(`Simple load error: ${err.message}`, 'error');
+        });
+    }
+</script>
+</body>
+</html>

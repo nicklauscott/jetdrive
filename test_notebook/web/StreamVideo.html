@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Progressive Video Streaming</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .method-selector {
+            margin: 20px 0;
+            padding: 15px;
+            background: #e8f4fd;
+            border-radius: 8px;
+        }
+        .method-selector label {
+            display: block;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+        .video-container {
+            position: relative;
+            margin: 20px 0;
+        }
+        video {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .progress-info {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 0 10px;
+            transition: background 0.3s;
+        }
+        button:hover { background: #2980b9; }
+        button:disabled { background: #bdc3c7; cursor: not-allowed; }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🎬 Progressive Video Streaming</h1>
+
+    <div class="method-selector">
+        <h3>Streaming Method:</h3>
+        <label>
+            <input type="radio" name="method" value="direct" checked>
+            <strong>Direct Streaming</strong> - Let browser handle progressive download (recommended)
+        </label>
+        <label>
+            <input type="radio" name="method" value="chunked">
+            <strong>Chunked Streaming</strong> - Manual chunk-by-chunk loading
+        </label>
+        <label>
+            <input type="radio" name="method" value="range">
+            <strong>Range Request Streaming</strong> - Load specific byte ranges
+        </label>
+    </div>
+
+    <div class="video-container">
+        <video id="video" controls preload="metadata">
+            Your browser does not support the video tag.
+        </video>
+    </div>
+
+    <div id="progressInfo" class="progress-info" style="display: none;">
+        <div>Loading progress: <span id="loadProgress">0%</span></div>
+        <div>Bytes loaded: <span id="bytesLoaded">0</span> / <span id="totalBytes">0</span></div>
+        <div>Can play: <span id="canPlay">No</span></div>
+    </div>
+
+    <div class="controls">
+        <button onclick="startStreaming()">Start Streaming</button>
+        <button onclick="stopStreaming()">Stop</button>
+        <button onclick="clearVideo()">Clear</button>
+    </div>
+
+    <div id="status" class="status"></div>
+</div>
+
+<script>
+    const videoElement = document.getElementById('video');
+    const progressInfo = document.getElementById('progressInfo');
+    const statusDiv = document.getElementById('status');
+
+    // Configuration
+    const config = {
+        videoUrl: 'http://localhost:8080/files/download/18b12309-0727-420c-92bf-439ecafac930',
+        authToken: 'eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwic3ViIjoiaW5mb0BhYmMuY29tIiwiaWF0IjoxNzUwNTc5MTYyLCJleHAiOjE3NTA2NjU1NjJ9.CLjGkUwsz2tDLriFULI8ZZ4qyXI62PKWWNrj5JseBDo', // Update this with a fresh token
+        chunkSize: 1024 * 1024 // 1MB chunks
+    };
+
+    let currentBlobUrl = null;
+    let abortController = null;
+
+    function showStatus(message, type = 'info') {
+        statusDiv.textContent = message;
+        statusDiv.className = `status ${type}`;
+        statusDiv.style.display = 'block';
+    }
+
+    function updateProgress(loaded, total) {
+        if (total > 0) {
+            const percent = Math.round((loaded / total) * 100);
+            document.getElementById('loadProgress').textContent = `${percent}%`;
+            document.getElementById('bytesLoaded').textContent = loaded.toLocaleString();
+            document.getElementById('totalBytes').textContent = total.toLocaleString();
+            progressInfo.style.display = 'block';
+        }
+    }
+
+    function getSelectedMethod() {
+        return document.querySelector('input[name="method"]:checked').value;
+    }
+
+    // Method 1: Direct Streaming (Recommended)
+    async function directStreaming() {
+        showStatus('Starting direct progressive streaming...', 'info');
+
+        try {
+            // Create a proxy URL that adds auth headers
+            const response = await fetch(config.videoUrl, {
+                method: 'HEAD', // Check if server supports range requests
+                headers: {
+                    'Authorization': `Bearer ${config.authToken}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Server error: ${response.status}`);
+            }
+
+            const acceptsRanges = response.headers.get('accept-ranges') === 'bytes';
+            const contentLength = parseInt(response.headers.get('content-length') || '0');
+
+            showStatus(`Server ${acceptsRanges ? 'supports' : 'does not support'} range requests. Content length: ${Math.round(contentLength/1024/1024)}MB`, 'info');
+
+            // For direct streaming, we'll use a custom fetch that provides progress
+            await streamWithProgress();
+
+        } catch (error) {
+            showStatus(`Direct streaming error: ${error.message}`, 'error');
+        }
+    }
+
+    // Enhanced streaming with progress tracking
+    async function streamWithProgress() {
+        try {
+            abortController = new AbortController();
+
+            const response = await fetch(config.videoUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${config.authToken}`,
+                    'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8'
+                },
+                signal: abortController.signal
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const contentLength = parseInt(response.headers.get('content-length') || '0');
+            const reader = response.body.getReader();
+            const chunks = [];
+            let loaded = 0;
+
+            // Read stream progressively
+            while (true) {
+                const { done, value } = await reader.read();
+
+                if (done) break;
+
+                chunks.push(value);
+                loaded += value.length;
+                updateProgress(loaded, contentLength);
+
+                // Create blob from chunks and update video source periodically
+                if (chunks.length % 10 === 0 || done) { // Update every 10 chunks
+                    const blob = new Blob(chunks, { type: 'video/mp4' });
+
+                    // Clean up previous blob URL
+                    if (currentBlobUrl) {
+                        URL.revokeObjectURL(currentBlobUrl);
+                    }
+
+                    currentBlobUrl = URL.createObjectURL(blob);
+                    videoElement.src = currentBlobUrl;
+
+                    // Let video start playing as soon as it has enough data
+                    if (chunks.length === 10) {
+                        videoElement.load();
+                        showStatus('Video started loading, playback will begin when ready...', 'success');
+                    }
+                }
+            }
+
+            // Final update with complete video
+            const finalBlob = new Blob(chunks, { type: 'video/mp4' });
+            if (currentBlobUrl) {
+                URL.revokeObjectURL(currentBlobUrl);
+            }
+            currentBlobUrl = URL.createObjectURL(finalBlob);
+            videoElement.src = currentBlobUrl;
+
+            showStatus('Streaming complete! Video fully loaded.', 'success');
+
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                showStatus('Streaming cancelled', 'info');
+            } else {
+                showStatus(`Streaming error: ${error.message}`, 'error');
+            }
+        }
+    }
+
+    // Method 2: Chunked Streaming
+    async function chunkedStreaming() {
+        showStatus('Starting chunked streaming...', 'info');
+
+        try {
+            // First, get the total file size
+            const headResponse = await fetch(config.videoUrl, {
+                method: 'HEAD',
+                headers: { 'Authorization': `Bearer ${config.authToken}` }
+            });
+
+            const totalSize = parseInt(headResponse.headers.get('content-length') || '0');
+            if (totalSize === 0) {
+                throw new Error('Cannot determine file size');
+            }
+
+            const chunks = [];
+            let loaded = 0;
+            abortController = new AbortController();
+
+            // Load in chunks
+            while (loaded < totalSize && !abortController.signal.aborted) {
+                const end = Math.min(loaded + config.chunkSize - 1, totalSize - 1);
+
+                const response = await fetch(config.videoUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${config.authToken}`,
+                        'Range': `bytes=${loaded}-${end}`
+                    },
+                    signal: abortController.signal
+                });
+
+                if (!response.ok && response.status !== 206) {
+                    throw new Error(`Chunk request failed: ${response.status}`);
+                }
+
+                const chunk = await response.arrayBuffer();
+                chunks.push(new Uint8Array(chunk));
+                loaded += chunk.byteLength;
+
+                updateProgress(loaded, totalSize);
+
+                // Update video every few chunks
+                if (chunks.length % 5 === 0 || loaded >= totalSize) {
+                    const blob = new Blob(chunks, { type: 'video/mp4' });
+
+                    if (currentBlobUrl) {
+                        URL.revokeObjectURL(currentBlobUrl);
+                    }
+
+                    currentBlobUrl = URL.createObjectURL(blob);
+                    videoElement.src = currentBlobUrl;
+
+                    if (chunks.length === 5) {
+                        videoElement.load();
+                        showStatus('Chunked streaming started...', 'success');
+                    }
+                }
+
+                // Small delay to prevent overwhelming the server
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            showStatus('Chunked streaming complete!', 'success');
+
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                showStatus('Chunked streaming cancelled', 'info');
+            } else {
+                showStatus(`Chunked streaming error: ${error.message}`, 'error');
+            }
+        }
+    }
+
+    // Method 3: Range Request Streaming (for seeking)
+    async function rangeStreaming() {
+        showStatus('Range request streaming requires specific server support...', 'info');
+
+        // This method would work best with a server that properly handles Range requests
+        // and returns Accept-Ranges: bytes header
+        try {
+            // Start with a small range to get metadata
+            const response = await fetch(config.videoUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${config.authToken}`,
+                    'Range': 'bytes=0-1048576' // First 1MB
+                }
+            });
+
+            if (response.status === 206) { // Partial content
+                showStatus('Server supports range requests! Loading initial chunk...', 'success');
+                const blob = await response.blob();
+
+                if (currentBlobUrl) {
+                    URL.revokeObjectURL(currentBlobUrl);
+                }
+
+                currentBlobUrl = URL.createObjectURL(blob);
+                videoElement.src = currentBlobUrl;
+                videoElement.load();
+
+                // You could implement more sophisticated range loading here
+                showStatus('Range streaming demo - first 1MB loaded', 'info');
+            } else {
+                showStatus('Server does not support range requests', 'error');
+            }
+
+        } catch (error) {
+            showStatus(`Range streaming error: ${error.message}`, 'error');
+        }
+    }
+
+    function startStreaming() {
+        clearVideo();
+
+        const method = getSelectedMethod();
+        switch (method) {
+            case 'direct':
+                directStreaming();
+                break;
+            case 'chunked':
+                chunkedStreaming();
+                break;
+            case 'range':
+                rangeStreaming();
+                break;
+        }
+    }
+
+    function stopStreaming() {
+        if (abortController) {
+            abortController.abort();
+            abortController = null;
+        }
+        showStatus('Streaming stopped', 'info');
+    }
+
+    function clearVideo() {
+        if (currentBlobUrl) {
+            URL.revokeObjectURL(currentBlobUrl);
+            currentBlobUrl = null;
+        }
+        videoElement.src = '';
+        progressInfo.style.display = 'none';
+        document.getElementById('canPlay').textContent = 'No';
+    }
+
+    // Video event listeners
+    videoElement.addEventListener('loadedmetadata', () => {
+        showStatus(`Video metadata loaded. Duration: ${Math.round(videoElement.duration)}s`, 'success');
+    });
+
+    videoElement.addEventListener('canplay', () => {
+        document.getElementById('canPlay').textContent = 'Yes';
+        showStatus('Video can start playing!', 'success');
+    });
+
+    videoElement.addEventListener('progress', () => {
+        if (videoElement.buffered.length > 0) {
+            const buffered = videoElement.buffered.end(0);
+            const duration = videoElement.duration || 1;
+            const bufferPercent = Math.round((buffered / duration) * 100);
+            // You could show buffer progress here
+        }
+    });
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', clearVideo);
+
+    // Initial setup
+    showStatus('Select a streaming method and click "Start Streaming"', 'info');
+</script>
+</body>
+</html>

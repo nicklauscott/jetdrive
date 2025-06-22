@@ -1,6 +1,6 @@
 package com.niclauscott.jetdrive.file_feature.file.controller;
 
-import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileNodeTreeResponse;
+import com.niclauscott.jetdrive.file_feature.file.model.dtos.*;
 import com.niclauscott.jetdrive.file_feature.file.service.FileNodeService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
@@ -37,6 +37,37 @@ public class FileNodeController {
         return response
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_MODIFIED).build());
+    }
+
+    @PostMapping("/create")
+    public ResponseEntity<?> createFileNode(@RequestBody FileNodeCreateRequestDTO request) {
+        service.createFileNode(request.getName(), "folder", request.getParentId(),
+                0L, null, false, null);
+        return new ResponseEntity<>(HttpStatus.CREATED);
+    }
+
+    @PatchMapping("/rename")
+    public ResponseEntity<?> updateFileNode(@RequestBody FileNodeRenameRequestDTO request) {
+        service.renameFileNode(request.getId(), request.getNewName());
+        return new ResponseEntity<>(HttpStatus.ACCEPTED);
+    }
+
+    @PatchMapping("/copy")
+    public ResponseEntity<?> copyFileNode(@RequestBody FileNodeCopyRequestDTO request) {
+        service.copyFileNode(request.getId(), request.getParentID());
+        return new ResponseEntity<>(HttpStatus.ACCEPTED);
+    }
+
+    @PatchMapping("/move")
+    public ResponseEntity<?> moveFileNode(@RequestBody FileNodeMoveRequestDTO request) {
+        service.moveFileNode(request.getId(), request.getNewParentID());
+        return new ResponseEntity<>(HttpStatus.ACCEPTED);
+    }
+
+    @PatchMapping("/delete/{id}")
+    public ResponseEntity<?> deleteFileNode(@PathVariable("id") UUID id) {
+        service.deleteFileNode(id);
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 
 }

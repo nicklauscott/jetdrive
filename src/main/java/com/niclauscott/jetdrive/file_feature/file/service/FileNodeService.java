@@ -1,6 +1,7 @@
 package com.niclauscott.jetdrive.file_feature.file.service;
 
 import com.niclauscott.jetdrive.common.model.UserPrincipal;
+import com.niclauscott.jetdrive.file_feature.common.exception.FileNotFoundException;
 import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileNodeDTO;
 import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileNodeTreeResponse;
 import com.niclauscott.jetdrive.file_feature.file.model.entities.FileNode;
@@ -60,7 +61,7 @@ public class FileNodeService {
 
     public FileNodeDTO createFileNode(
             String name, String type, String parentId, long size,
-            String storagePath, String mimeType,
+            String storagePath,
             boolean hasThumbnail, String thumbnailPath
     ) {
         var auth = SecurityContextHolder.getContext().getAuthentication();
@@ -70,13 +71,52 @@ public class FileNodeService {
         if (parentId != null) fileNode.setParentId(UUID.fromString(parentId));
         fileNode.setName(name);
         fileNode.setType(type);
-        fileNode.setMimeType(mimeType);
+        fileNode.setMimeType(MimeTypeUtil.getMimeTypeByExtension(name));
         fileNode.setSize(size);
         fileNode.setStoragePath(storagePath);
         fileNode.setHasThumbnail(hasThumbnail);
         if (thumbnailPath != null) fileNode.setThumbnailPath(thumbnailPath);
-        log.info("--------------------- StoragePath: {}", storagePath);
         return FileNodeMapper.toDTO(repository.save(fileNode));
+    }
+
+    @Transactional
+    public void renameFileNode(String id, String name) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
+        FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), UUID.fromString(id))
+
+                .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
+        fileNode.setName(name);
+        repository.save(fileNode);
+    }
+
+    @Transactional
+    public void deleteFileNode(UUID id) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
+        repository.deleteByUserIdAndId(userPrincipal.getUserId(), id);
+        // Delete thumbnail and the actual file
+    }
+
+    @Transactional
+    public void copyFileNode(String id, String parentID) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
+        FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), UUID.fromString(id))
+                .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
+        fileNode.setId(UUID.randomUUID()); // create a copy of the old file node
+        fileNode.setParentId(UUID.fromString(parentID));
+        repository.save(fileNode);
+    }
+
+    @Transactional
+    public void moveFileNode(String id, String newParentID) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
+        FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), UUID.fromString(id))
+                .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
+        fileNode.setParentId(UUID.fromString(newParentID)); // move the file node to a new parent (i.e., folder)
+        repository.save(fileNode);
     }
 
 }
