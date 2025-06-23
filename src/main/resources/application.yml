@@ -20,7 +20,7 @@ spring:
       ddl-auto: create-drop
 
 jwt:
-  secret: {JWT_SECRET_V2_BASE64}
+  secret: ZkdJcFJ6N1JPdTVPZjB4c0RqNDNUQ0JuS1NLaHU0ZFM= #{JWT_SECRET_V2_BASE64}
 
 #logging:
 #  level:

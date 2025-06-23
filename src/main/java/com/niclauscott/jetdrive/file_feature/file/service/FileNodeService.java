@@ -40,6 +40,14 @@ public class FileNodeService {
         return Optional.of(new FileNodeTreeResponse(null, null, dtoList));
     }
 
+    public FileNodeDTO getFile(UUID fileID) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
+        FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), fileID)
+                .orElseThrow(() -> new FileNotFoundException("No file with the id found"));
+        return FileNodeMapper.toDTO(fileNode);
+    }
+
     public Optional<FileNodeTreeResponse> getChildren(UUID parentId, Optional<LocalDateTime> ifUpdatedSince) {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
@@ -118,7 +126,6 @@ public class FileNodeService {
         fileNode.setParentId(UUID.fromString(newParentID)); // move the file node to a new parent (i.e., folder)
         repository.save(fileNode);
     }
-
 }
 
 @Slf4j

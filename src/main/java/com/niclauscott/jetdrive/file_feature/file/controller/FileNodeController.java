@@ -28,9 +28,15 @@ public class FileNodeController {
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_MODIFIED).build());
     }
 
-    @GetMapping("/{parentId}/children")
+    @GetMapping("/{file_id}")
+    public ResponseEntity<FileNodeDTO> getFile(@PathVariable("file_id") UUID fileId) {
+        FileNodeDTO response = service.getFile(fileId);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{parent_Id}/children")
     public ResponseEntity<?> getChildren(
-            @PathVariable("parentId") UUID parentId, @RequestParam Optional<LocalDateTime> ifUpdatedSince
+            @PathVariable("parent_Id") UUID parentId, @RequestParam Optional<LocalDateTime> ifUpdatedSince
     ) {
         Optional<FileNodeTreeResponse> response = service.getChildren(parentId, ifUpdatedSince);
 
