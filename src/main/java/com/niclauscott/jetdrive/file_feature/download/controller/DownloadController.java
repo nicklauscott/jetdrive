@@ -27,13 +27,15 @@ public class DownloadController {
             @RequestHeader(value = "Range", required = false) String rangeHeader
     ) {
 
-        StreamVideoResource resource = service.serveFile(fileID, mode, rangeHeader);
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.parseMediaType(resource.getMimeType()));
-        headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
 
         if ("download".equals(mode)) {
+            StreamVideoResource resource = service.serveFile(fileID,null);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType(resource.getMimeType()));
+            headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
+
             headers.setContentDisposition(ContentDisposition.attachment()
                     .filename(resource.getFilename())
                     .build());
@@ -44,14 +46,22 @@ public class DownloadController {
         }
 
         if ("stream".equals(mode)) {
+            StreamVideoResource resource = service.serveFile(fileID, rangeHeader);
+
             return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                    .header(HttpHeaders.CONTENT_TYPE, "video/" + resource.getMimeType())
+                    .header(HttpHeaders.CONTENT_TYPE, resource.getMimeType())
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                     .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(resource.getContentLength()))
                     .header(HttpHeaders.CONTENT_RANGE,
                             "bytes " + resource.getStart() + "-" + resource.getEnd() + "/" + resource.getFileSize())
                     .body(resource.getResource());
         }
+
+        StreamVideoResource resource = service.serveFile(fileID, null);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType(resource.getMimeType()));
+        headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
 
         headers.setContentDisposition(ContentDisposition.inline()
                 .filename(resource.getFilename())

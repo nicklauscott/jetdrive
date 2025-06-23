@@ -17,6 +17,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
+
+import java.io.File;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -145,7 +147,19 @@ class Cml implements CommandLineRunner {
         user.setEmail("info@abc.com");
         user.setPasswordHash(passwordEncoder.encode("pass12345"));
         user.setAuthType("password");
-        userRepository.save(user);
+        User dbUser = userRepository.save(user);
+
+        FileNode fileNode = new FileNode();
+        fileNode.setName("GET THE GIRL!!! - The Office - 8x19 - Group Reaction.mp4");
+        fileNode.setType("file");
+        fileNode.setUserId(dbUser.getId());
+        fileNode.setStoragePath("add13922-5710-48a4-aef1-a5ed3631de5b/GET THE GIRL!!! - The Office - 8x19 - Group Reaction.mp4");
+        fileNode.setMimeType("video/mp4");
+        fileNode.setSize(Long.parseLong("56405497"));
+        fileNode.setHasThumbnail(false);
+        FileNode dbfileNode = repository.save(fileNode);
+
+        log.info("Saved file node: {}", dbfileNode);
 
         //loadFileNodes(user.getId());
 

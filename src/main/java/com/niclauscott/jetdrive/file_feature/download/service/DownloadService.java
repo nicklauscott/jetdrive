@@ -5,12 +5,18 @@ import com.niclauscott.jetdrive.file_feature.common.exception.FileNotFoundExcept
 import com.niclauscott.jetdrive.file_feature.download.model.dtos.StreamVideoResource;
 import com.niclauscott.jetdrive.file_feature.file.model.entities.FileNode;
 import com.niclauscott.jetdrive.file_feature.file.repository.FileNodeRepository;
+import com.niclauscott.jetdrive.user_feature.model.entities.User;
+import com.niclauscott.jetdrive.user_feature.repository.UserRepository;
+import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import java.io.InputStream;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -21,7 +27,7 @@ public class DownloadService {
     private final FileNodeRepository repository;
     private final MinioService minioService;
 
-    public StreamVideoResource serveFile(UUID fileId, String mode, String httpRangeList) {
+    public StreamVideoResource serveFile(UUID fileId, String httpRangeList) {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
         FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), fileId)
