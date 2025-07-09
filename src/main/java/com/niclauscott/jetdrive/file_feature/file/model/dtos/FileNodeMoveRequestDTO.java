@@ -5,5 +5,5 @@ import lombok.Data;
 @Data
 public class FileNodeMoveRequestDTO {
     private String id;
-    private String newParentID;
+    private String newParentId;
 }

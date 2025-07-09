@@ -2,8 +2,11 @@ package com.niclauscott.jetdrive.file_feature.upload.service;
 
 import com.niclauscott.jetdrive.common.model.UserPrincipal;
 import com.niclauscott.jetdrive.file_feature.common.constant.FileStorageProperties;
+import com.niclauscott.jetdrive.file_feature.common.exception.CantUploadFileException;
+import com.niclauscott.jetdrive.file_feature.download.service.MinioService;
 import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileNodeDTO;
 import com.niclauscott.jetdrive.file_feature.file.service.FileNodeService;
+import com.niclauscott.jetdrive.file_feature.file.service.MimeTypeUtil;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UncompletedUploadException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UploadNotSupportedException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UploadSessionNotFoundException;
@@ -13,20 +16,27 @@ import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadInitiateRes
 import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadSession;
 import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadStatus;
 import com.niclauscott.jetdrive.file_feature.upload.repository.UploadSessionRepository;
+import com.niclauscott.jetdrive.user_feature.repository.UserRepository;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.coobird.thumbnailator.Thumbnails;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -37,13 +47,55 @@ import java.util.regex.Pattern;
 public class UploadService {
 
     private final UploadSessionRepository sessionRepository;
+    private final UserRepository userRepository;
     private final FileNodeService fileNodeService;
     private final MinioClient minioClient;
+    private final MinioService minioService;
     private final FileStorageProperties fileStorageProperties;
+
+    public String uploadProfilePicture(MultipartFile file, String userId, String oldProfilePicture)
+            throws IOException {
+        String mimeType = MimeTypeUtil.getMimeTypeByExtension(Objects.requireNonNull(file.getOriginalFilename()));
+        if (!Objects.equals(mimeType.split("/")[0], "image")) {
+            throw new CantUploadFileException("File type not supported");
+        }
+        String format = mimeType.split("/")[1];
+        String compressedObjectName = userId.replace(".", "_") + "." + format;
+
+        // Convert MultipartFile to BufferedImage
+        BufferedImage image = ImageIO.read(file.getInputStream());
+
+        // Compress image to ByteArrayOutputStream
+        ByteArrayOutputStream compressedOut = new ByteArrayOutputStream();
+        Thumbnails.of(image)
+                .scale(1.0)
+                .outputQuality(0.5)
+                .outputFormat(format)
+                .toOutputStream(compressedOut);
+
+        byte[] compressedBytes = compressedOut.toByteArray();
+        ByteArrayInputStream inputStream = new ByteArrayInputStream(compressedBytes);
+
+        // delete the old picture
+        if (oldProfilePicture != null) minioService.deleteProfilePicture(oldProfilePicture);
+
+        // Upload to MinIO
+        minioService.uploadProfilePicture(inputStream, compressedBytes.length, -1, compressedObjectName);
+        return "profile-picture/" + compressedObjectName;
+    }
 
     @Transactional
     public UploadInitiateResponse initiateUpload(UploadInitiateRequest request) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
+
+        int fileSizeMb = (int) ((int) Math.ceil(request.getFileSize()) / (1024.0 * 1024.0));
+        if (!userRepository.canUserUpload(userPrincipal.getUserId(), fileSizeMb)) {
+            throw new CantUploadFileException("You can't upload at the moment");
+        }
+
         UploadSession session = saveUploadSession(
+                userPrincipal.getUserId(),
                 request.getFileName(), request.getFileSize(),
                 request.getParentId(), request.isHasThumbnail()
         );
@@ -78,7 +130,7 @@ public class UploadService {
             log.info("Saving new chunk: part: {}", partNumber);
             minioClient.putObject(
                     PutObjectArgs.builder()
-                            .bucket(fileStorageProperties.bucket())
+                            .bucket(fileStorageProperties.uploadBucket())
                             .object(session.getObjectKey() + ".part" + partNumber)
                             .stream(inputStream, range.end - range.start + 1, -1)
                             .build()
@@ -113,7 +165,7 @@ public class UploadService {
             for (int i : session.getUploadedParts().keySet().stream().sorted().toList()) {
                 try (InputStream in = minioClient.getObject(
                         GetObjectArgs.builder()
-                                .bucket(fileStorageProperties.bucket())
+                                .bucket(fileStorageProperties.uploadBucket())
                                 .object(finalObject + ".part" + i)
                                 .build()
                 )) {
@@ -123,7 +175,7 @@ public class UploadService {
 
             minioClient.putObject(
                     PutObjectArgs.builder()
-                            .bucket(fileStorageProperties.bucket())
+                            .bucket(fileStorageProperties.uploadBucket())
                             .object(finalObject)
                             .stream(new ByteArrayInputStream(combined.toByteArray()), combined.size(), -1)
                             .build()
@@ -133,7 +185,7 @@ public class UploadService {
                 try {
                     minioClient.removeObject(
                             io.minio.RemoveObjectArgs.builder()
-                                    .bucket(fileStorageProperties.bucket())
+                                    .bucket(fileStorageProperties.uploadBucket())
                                     .object(finalObject + ".part" + i)
                                     .build()
                     );
@@ -181,14 +233,11 @@ public class UploadService {
     }
 
     private UploadSession saveUploadSession(
-            String fileName, long totalSize,
+            UUID userId, String fileName, long totalSize,
             String parentId, boolean hasThumbnail
     ) {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
-
         UploadSession uploadSession = new UploadSession();
-        uploadSession.setUserId(userPrincipal.getUserId());
+        uploadSession.setUserId(userId);
         uploadSession.setParentId(parentId);
         uploadSession.setTotalSize(totalSize);
         uploadSession.setFileName(fileName);

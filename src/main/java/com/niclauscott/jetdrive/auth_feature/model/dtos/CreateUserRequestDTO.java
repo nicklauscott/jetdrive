@@ -21,4 +21,6 @@ public class CreateUserRequestDTO {
     @NotNull(message = "Password is required")
     @Size(min = 6, message = "Password name must be at least 6 characters long")
     private String password;
+
+    private String picUrl;
 }

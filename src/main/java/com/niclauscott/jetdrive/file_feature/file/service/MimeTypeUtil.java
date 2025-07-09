@@ -1,7 +1,6 @@
 package com.niclauscott.jetdrive.file_feature.file.service;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 public class MimeTypeUtil {
 
@@ -50,6 +49,12 @@ public class MimeTypeUtil {
 
         MIME_TYPES.put("apk", "application/vnd.android.package-archive");
         MIME_TYPES.put("exe", "application/vnd.microsoft.portable-executable");
+    }
+
+    public static String getRandomMimeType() {
+        List<Map.Entry<String, String>> entries = new ArrayList<>(MIME_TYPES.entrySet());
+        Map.Entry<String, String> randomEntry = entries.get(new Random().nextInt(entries.size()));
+        return randomEntry.getValue();
     }
 
     public static String getMimeTypeByExtension(String filename) {

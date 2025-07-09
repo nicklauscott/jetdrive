@@ -10,6 +10,7 @@ import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/user")
@@ -28,7 +29,14 @@ public class UserController {
     @PatchMapping
     @Operation(description = "Update user")
     public ResponseEntity<UserResponseDTO> updateUser(@Valid @RequestBody UpdateUserRequestDTO requestDTO) {
-        return ResponseEntity.ok(service.updateUser(requestDTO));
+        return new ResponseEntity<>(service.updateUser(requestDTO), HttpStatus.ACCEPTED);
+    }
+
+    @PostMapping
+    ResponseEntity<?> uploadProfilePicture(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) return ResponseEntity.badRequest().body("File is empty");
+        service.upload(file);
+        return new ResponseEntity<>(HttpStatus.ACCEPTED);
     }
 
     @DeleteMapping

@@ -2,6 +2,7 @@ package com.niclauscott.jetdrive.common.exception;
 
 import com.niclauscott.jetdrive.auth_feature.exception.BadCredentialsException;
 import com.niclauscott.jetdrive.auth_feature.exception.InvalidOrExpiredTokenException;
+import com.niclauscott.jetdrive.file_feature.common.exception.CantUploadFileException;
 import com.niclauscott.jetdrive.file_feature.common.exception.FileNotFoundException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UncompletedUploadException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UploadNotSupportedException;
@@ -18,6 +19,13 @@ import java.util.Map;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(CantUploadFileException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ResponseEntity<Map<String, String>> handleCantUploadFileException(CantUploadFileException e) {
+        Map<String, String> error = Map.of("message", e.getMessage());
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
 
     @ExceptionHandler(FileNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)

@@ -44,6 +44,7 @@ public class AuthConfig {
                 config.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         http.authorizeHttpRequests(auth ->
                 auth.requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/v3/**").permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD).permitAll()
                         .anyRequest().authenticated()
          );

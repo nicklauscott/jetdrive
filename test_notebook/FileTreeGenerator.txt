@@ -1,0 +1,117 @@
+
+data class FileNode(
+    val id: Int, val parentId: Int? = null, val name:String, val type: String
+)
+
+
+val files = mutableListOf<FileNode>()
+
+var id = 0
+fun generateFileTree(
+    size: Int, fileRatio: Int,
+    parentId: Int = -1
+) {
+   
+    if (size <= 1) return 
+
+    val folderIds = mutableListOf<Int>()
+    
+    val folder = size - fileRatio
+
+    for (n in 1..size) {
+        if (n <= folder) {
+            id++
+            folderIds.add(id)
+            val fn = FileNode(
+                id = id,
+                parentId = if (parentId == -1) null else parentId, 
+                name = "Folder $id",
+                type = "Folder"
+            )
+            files.add(fn)
+        } else {
+            id++
+            val fn = FileNode(
+                id = id,
+                parentId = if (parentId == -1) null else parentId, 
+                name = "File $id",
+                type = "File"
+            )
+            files.add(fn)
+        }
+    }
+    
+    folderIds.forEach { 
+        generateFileTree(
+            size = size - 1,
+            fileRatio - fileRatio + 1,
+            parentId = it
+        )
+    }
+}
+
+
+data class FolderTree(
+    val fileNode: FileNode,
+    val children: List<FolderTree>
+)
+
+
+fun buildFolderTreeDeep(nodes: List<FileNode>): List<FolderTree> {
+    val childrenMap = nodes.groupBy { it.parentId }
+
+    fun buildTree(node: FileNode): FolderTree {
+        val children = childrenMap[node.id].orEmpty().map { buildTree(it) }
+        return FolderTree(node, children)
+    }
+
+    return childrenMap[null].orEmpty().map { buildTree(it) }
+}
+
+
+fun printFolderTree(trees: List<FolderTree>, indent: String = "") {
+    for (tree in trees) {
+        println("$indent- ${tree.fileNode.name} (${tree.fileNode.type})")
+        printFolderTree(tree.children, indent + "  ")
+    }
+}
+
+
+fun main(args: Array<String>) {
+    var size = 5
+    var fileRatio = 1
+    
+    if (args.size > 0) {
+        size = try {
+            args[0].toInt()
+        } catch (_: Exception) { 5 }
+    }
+    
+        
+    if (args.size > 1) {
+        size = try {
+            args[0].toInt()
+        } catch (_: Exception) { 5 }
+        fileRatio = try {
+            args[1].toInt()
+        } catch (_: Exception) { 1 }
+    }
+    
+    if (size > 12) {
+        println("Size is too much, try a lower number")
+        return
+    }
+    generateFileTree(size, fileRatio)
+    println(files.size)
+    
+    print("Build and show file tree [yes] ")
+    val input = readLine()
+    
+    if (input == "yes") {
+        val nodeTress: List<FolderTree> = buildFolderTreeDeep(files)
+    
+        printFolderTree(nodeTress, "-")
+    }
+    
+
+}

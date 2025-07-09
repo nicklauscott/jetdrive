@@ -26,9 +26,11 @@ repositories {
 
 dependencies {
 
+	implementation("net.coobird:thumbnailator:0.4.20")
+
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8")
 
-	implementation("com.google.api-client:google-api-client:1.34.1")
+	implementation("com.google.api-client:google-api-client:2.8.0")
 
 	implementation("org.springframework.security:spring-security-crypto")
 	implementation("io.jsonwebtoken:jjwt-api:0.12.6")

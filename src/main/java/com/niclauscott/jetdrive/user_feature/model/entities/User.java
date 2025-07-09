@@ -23,6 +23,9 @@ public class User {
     @Column(name = "last_name")
     private String lastName;
 
+    @Column(name = "avatar_uri")
+    private String picture;
+
     @Column(name = "password_hash")
     private String passwordHash;
 
