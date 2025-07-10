@@ -35,8 +35,8 @@ public class FileNode {
     @Column(name = "has_thumbnail")
     private Boolean hasThumbnail = false;
 
-    @Column(name = "storage_path")
-    private String storagePath;
+    @Column(name = "object_id")
+    private String objectId;
 
     @Column(name = "thumbnail_path")
     private String thumbnailPath;

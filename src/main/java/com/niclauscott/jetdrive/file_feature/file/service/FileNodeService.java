@@ -4,9 +4,7 @@ import com.niclauscott.jetdrive.common.model.UserPrincipal;
 import com.niclauscott.jetdrive.file_feature.common.exception.FileNotFoundException;
 import com.niclauscott.jetdrive.file_feature.download.service.MinioService;
 import com.niclauscott.jetdrive.file_feature.file.model.constant.DefaultFileNodes;
-import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileNodeDTO;
-import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileNodeTreeResponse;
-import com.niclauscott.jetdrive.file_feature.file.model.dtos.UserFileStatsResponseDTO;
+import com.niclauscott.jetdrive.file_feature.file.model.dtos.*;
 import com.niclauscott.jetdrive.file_feature.file.model.entities.FileNode;
 import com.niclauscott.jetdrive.file_feature.file.model.mapper.FileNodeMapper;
 import com.niclauscott.jetdrive.file_feature.file.repository.FileNodeRepository;
@@ -15,7 +13,6 @@ import com.niclauscott.jetdrive.user_feature.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.coobird.thumbnailator.Thumbnails;
 import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.data.domain.PageRequest;
@@ -26,7 +23,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
-import java.io.IOException;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -74,12 +71,21 @@ public class FileNodeService {
         return Optional.of(new FileNodeTreeResponse(null, LocalDateTime.now(), dtoList));
     }
 
-    public FileNodeDTO getFile(UUID fileID) {
+    public FileNodeDTO getFile(UUID fileId) {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
-        FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), fileID)
+        FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), fileId)
                 .orElseThrow(() -> new FileNotFoundException("No file with the id found"));
         return FileNodeMapper.toDTO(fileNode);
+    }
+
+    public FileUrlResponseDTO getFileUrl(UUID fileId) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
+        FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), fileId)
+                .orElseThrow(() -> new FileNotFoundException("No file with the id found"));
+        if (fileNode.getObjectId() == null) throw new FileNotFoundException("No file with the id found");
+        return minioService.getPresignedUrl(fileNode.getObjectId());
     }
 
     public Optional<FileNodeTreeResponse> getChildren(UUID parentId, Optional<LocalDateTime> ifUpdatedSince) {
@@ -129,7 +135,7 @@ public class FileNodeService {
         fileNode.setType(type);
         if (!Objects.equals(type, "folder")) fileNode.setMimeType(MimeTypeUtil.getMimeTypeByExtension(name));
         fileNode.setSize(size);
-        fileNode.setStoragePath(storagePath);
+        fileNode.setObjectId(storagePath);
         fileNode.setHasThumbnail(hasThumbnail);
         if (thumbnailPath != null) fileNode.setThumbnailPath(thumbnailPath);
 
@@ -262,11 +268,11 @@ public class FileNodeService {
                 // Generate new S3 path if it's a file
                 if (Objects.equals(child.getType(), "file")) {
                     String newS3Path = generateNewS3Path(copy.getId(), child.getMimeType());
-                    copy.setStoragePath(newS3Path);
+                    copy.setObjectId(newS3Path);
 
                     //minioService.copyObject(child.getStoragePath(), newS3Path); // Copy in S3
                 } else {
-                    copy.setStoragePath(null);
+                    copy.setObjectId(null);
                 }
 
                 FileNode savedCopy = repository.save(copy);
@@ -291,6 +297,15 @@ public class FileNodeService {
         }
     }
 
+    public AudioMetadata getMetadata(UUID fileId) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
+        FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), fileId)
+                .orElseThrow(() -> new FileNotFoundException("No file with the id found"));
+        if (fileNode.getObjectId() == null) throw new FileNotFoundException("No file with the id found");
+        InputStream stream = minioService.getFileStream(fileNode.getObjectId());
+        return AudioMetadataExtractor.extractMetadata(stream);
+    }
 }
 
 @Slf4j
@@ -319,7 +334,7 @@ class Cml implements CommandLineRunner {
         fileNode.setName("GET THE GIRL!!! - The Office - 8x19 - Group Reaction.mp4");
         fileNode.setType("file");
         fileNode.setUserId(dbUser.getId());
-        fileNode.setStoragePath("add13922-5710-48a4-aef1-a5ed3631de5b/GET THE GIRL!!! - The Office - 8x19 - Group Reaction.mp4");
+        fileNode.setObjectId("add13922-5710-48a4-aef1-a5ed3631de5b/GET THE GIRL!!! - The Office - 8x19 - Group Reaction.mp4");
         fileNode.setMimeType("video/mp4");
         fileNode.setSize(Long.parseLong("56405497"));
         fileNode.setHasThumbnail(false);

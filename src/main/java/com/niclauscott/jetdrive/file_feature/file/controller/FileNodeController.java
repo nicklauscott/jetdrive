@@ -42,6 +42,20 @@ public class FileNodeController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/url/{file_id}")
+    public ResponseEntity<FileUrlResponseDTO> getFileUrl(@PathVariable("file_id") UUID fileId) {
+        FileUrlResponseDTO response = service.getFileUrl(fileId);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{file_id}/metadata")
+    public ResponseEntity<AudioMetadata> getMetadata(@PathVariable("file_id") UUID fileId) {
+        AudioMetadata response = service.getMetadata(fileId);
+        return ResponseEntity.ok(response);
+    }
+
+
+
     @GetMapping("/{parent_Id}/children")
     public ResponseEntity<?> getChildren(
             @PathVariable("parent_Id") UUID parentId, @RequestParam Optional<LocalDateTime> ifUpdatedSince

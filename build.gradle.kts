@@ -25,6 +25,7 @@ repositories {
 }
 
 dependencies {
+	implementation("net.jthink:jaudiotagger:2.2.5")
 
 	implementation("net.coobird:thumbnailator:0.4.20")
 

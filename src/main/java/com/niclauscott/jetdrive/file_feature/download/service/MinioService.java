@@ -2,8 +2,10 @@ package com.niclauscott.jetdrive.file_feature.download.service;
 
 import com.niclauscott.jetdrive.file_feature.common.constant.FileStorageProperties;
 import com.niclauscott.jetdrive.file_feature.common.exception.FileNotFoundException;
+import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileUrlResponseDTO;
 import io.minio.*;
 import io.minio.errors.*;
+import io.minio.http.Method;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -11,8 +13,15 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
+import java.util.Enumeration;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @AllArgsConstructor
@@ -144,6 +153,52 @@ public class MinioService {
             throw new FileNotFoundException(e.getMessage());
         }
 
+    }
+
+    public FileUrlResponseDTO getPresignedUrl(String objectName) {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            String url =  minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .method(Method.GET)
+                            .bucket(fileStorageProperties.uploadBucket())
+                            .object(objectName)
+                            .expiry(5, TimeUnit.MINUTES)
+                            .build()
+            );
+            return new FileUrlResponseDTO(url.replace("localhost", getHostAddress()), now.plusMinutes(5));
+        } catch (ErrorResponseException | InsufficientDataException | InternalException | InvalidKeyException |
+                 InvalidResponseException | IOException | NoSuchAlgorithmException | ServerException |
+                 XmlParserException e) {
+            throw new FileNotFoundException(e.getMessage());
+        }
+    }
+
+    // -------------------------------------- Remove later -----------------------------------
+    private String getHostAddress() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface iface = interfaces.nextElement();
+
+                // Ignore down or loopback interfaces
+                if (!iface.isUp() || iface.isLoopback()) continue;
+
+                Enumeration<InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+
+                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
+                        return addr.getHostAddress();
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            log.info("------------------------- Error: {}", e.getMessage());
+            return  "";
+        }
+        return "";
     }
 
 }

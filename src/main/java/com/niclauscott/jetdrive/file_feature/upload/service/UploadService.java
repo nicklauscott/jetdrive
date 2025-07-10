@@ -68,8 +68,8 @@ public class UploadService {
         // Compress image to ByteArrayOutputStream
         ByteArrayOutputStream compressedOut = new ByteArrayOutputStream();
         Thumbnails.of(image)
-                .scale(1.0)
-                .outputQuality(0.5)
+                .scale(0.6)
+                .outputQuality(0.3)
                 .outputFormat(format)
                 .toOutputStream(compressedOut);
 

@@ -5,18 +5,12 @@ import com.niclauscott.jetdrive.file_feature.common.exception.FileNotFoundExcept
 import com.niclauscott.jetdrive.file_feature.download.model.dtos.StreamVideoResource;
 import com.niclauscott.jetdrive.file_feature.file.model.entities.FileNode;
 import com.niclauscott.jetdrive.file_feature.file.repository.FileNodeRepository;
-import com.niclauscott.jetdrive.user_feature.model.entities.User;
-import com.niclauscott.jetdrive.user_feature.repository.UserRepository;
-import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import java.io.InputStream;
-import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -33,7 +27,7 @@ public class DownloadService {
         FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), fileId)
                 .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
 
-        long fileLength = minioService.getFileLength(fileNode.getStoragePath());
+        long fileLength = minioService.getFileLength(fileNode.getObjectId());
         long start = 0;
         long end = fileLength - 1;
 
@@ -46,7 +40,7 @@ public class DownloadService {
         }
 
         long contentLength = end - start + 1;
-        InputStream stream = minioService.getFileStreamWithOffset(fileNode.getStoragePath(), start, contentLength);
+        InputStream stream = minioService.getFileStreamWithOffset(fileNode.getObjectId(), start, contentLength);
         return new StreamVideoResource(
                 fileNode.getMimeType(),
                 fileNode.getName(),

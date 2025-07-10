@@ -116,7 +116,7 @@ public class UserService {
         repository.deleteByEmail(userPrincipal.getUsername());
     }
 
-    // Remove later
+    // -------------------------------------- Remove later -----------------------------------
     private String getHostAddress() {
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();

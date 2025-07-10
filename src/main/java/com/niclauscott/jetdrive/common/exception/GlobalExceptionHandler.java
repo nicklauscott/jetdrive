@@ -2,6 +2,7 @@ package com.niclauscott.jetdrive.common.exception;
 
 import com.niclauscott.jetdrive.auth_feature.exception.BadCredentialsException;
 import com.niclauscott.jetdrive.auth_feature.exception.InvalidOrExpiredTokenException;
+import com.niclauscott.jetdrive.file_feature.common.exception.AudioMetaDataExtractionException;
 import com.niclauscott.jetdrive.file_feature.common.exception.CantUploadFileException;
 import com.niclauscott.jetdrive.file_feature.common.exception.FileNotFoundException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UncompletedUploadException;
@@ -26,6 +27,16 @@ public class GlobalExceptionHandler {
         Map<String, String> error = Map.of("message", e.getMessage());
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
+
+    @ExceptionHandler(AudioMetaDataExtractionException.class)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public ResponseEntity<Map<String, String>> handleAudioMetaDataExtractionException(
+            AudioMetaDataExtractionException e)
+    {
+        Map<String, String> error = Map.of("message", e.getMessage());
+        return new ResponseEntity<>(error, HttpStatus.NO_CONTENT);
+    }
+
 
     @ExceptionHandler(FileNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)

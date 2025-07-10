@@ -4,8 +4,6 @@ import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileNodeDTO;
 import com.niclauscott.jetdrive.file_feature.file.model.entities.FileNode;
 import jakarta.transaction.Transactional;
 
-import java.util.UUID;
-
 public class FileNodeMapper {
     public static FileNodeDTO toDTO(FileNode fileNode) {
         FileNodeDTO dto = new FileNodeDTO();
@@ -31,7 +29,7 @@ public class FileNodeMapper {
         dto.setSize(fileNode.getSize());
         dto.setMimeType(fileNode.getMimeType());
         dto.setHasThumbnail(fileNode.getHasThumbnail());
-        dto.setStoragePath(fileNode.getStoragePath());
+        dto.setObjectId(fileNode.getObjectId());
         dto.setHasThumbnail(fileNode.getHasThumbnail());
         return dto;
     }
