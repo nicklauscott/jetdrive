@@ -9,7 +9,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -53,7 +52,6 @@ public class FileNodeController {
         AudioMetadata response = service.getMetadata(fileId);
         return ResponseEntity.ok(response);
     }
-
 
 
     @GetMapping("/{parent_Id}/children")

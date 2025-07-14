@@ -36,7 +36,7 @@ public class JwtFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         if (request.getRequestURI().startsWith("/auth/") || request.getRequestURI().startsWith("/auth/google/")
-                || request.getRequestURI().startsWith("/v3/")) {
+                || request.getRequestURI().startsWith("/v3/") || request.getRequestURI().startsWith("/h2-console")) {
             filterChain.doFilter(request, response);
             return;
         }

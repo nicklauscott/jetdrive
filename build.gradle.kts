@@ -25,6 +25,8 @@ repositories {
 }
 
 dependencies {
+	implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
+
 	implementation("net.jthink:jaudiotagger:2.2.5")
 
 	implementation("net.coobird:thumbnailator:0.4.20")

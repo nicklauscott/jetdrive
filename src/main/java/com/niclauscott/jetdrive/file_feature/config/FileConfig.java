@@ -46,9 +46,9 @@ public class FileConfig {
                 }
             }
         } catch (SocketException e) {
-            return  "";
+            return  "localhost";
         }
-        return "";
+        return "localhost";
     }
 
 }

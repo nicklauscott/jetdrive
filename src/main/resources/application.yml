@@ -28,10 +28,10 @@ spring:
       ddl-auto: create-drop
 
 jwt:
-  secret: #{JWT_SECRET_V2_BASE64}
+  secret: ZkdJcFJ6N1JPdTVPZjB4c0RqNDNUQ0JuS1NLaHU0ZFM= #{JWT_SECRET_V2_BASE64}
 
 google:
-  clientId: #{GOOGLE_CLIENT_ID}
+  clientId: 551260504895-mofqeookk23lmol3g8r9npjol9r03fm5.apps.googleusercontent.com #{GOOGLE_CLIENT_ID}
 
 #logging:
 #  level:

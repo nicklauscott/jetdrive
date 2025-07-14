@@ -1,12 +1,17 @@
 package com.niclauscott.jetdrive.file_feature.file.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.niclauscott.jetdrive.common.model.UserPrincipal;
 import com.niclauscott.jetdrive.file_feature.common.exception.FileNotFoundException;
 import com.niclauscott.jetdrive.file_feature.download.service.MinioService;
 import com.niclauscott.jetdrive.file_feature.file.model.constant.DefaultFileNodes;
 import com.niclauscott.jetdrive.file_feature.file.model.dtos.*;
+import com.niclauscott.jetdrive.file_feature.file.model.entities.ChangeType;
+import com.niclauscott.jetdrive.file_feature.file.model.entities.FileChangeEvent;
 import com.niclauscott.jetdrive.file_feature.file.model.entities.FileNode;
+import com.niclauscott.jetdrive.file_feature.file.model.mapper.FileChangeEventMapper;
 import com.niclauscott.jetdrive.file_feature.file.model.mapper.FileNodeMapper;
+import com.niclauscott.jetdrive.file_feature.file.repository.FileChangeEventRepository;
 import com.niclauscott.jetdrive.file_feature.file.repository.FileNodeRepository;
 import com.niclauscott.jetdrive.user_feature.model.entities.User;
 import com.niclauscott.jetdrive.user_feature.repository.UserRepository;
@@ -34,6 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class FileNodeService {
 
     private final FileNodeRepository repository;
+    private final FileChangeEventRepository eventRepository;
     private final UserRepository userRepository;
     private final MinioService minioService;
 
@@ -141,6 +147,7 @@ public class FileNodeService {
 
         FileNode dbFileNode = repository.save(fileNode);
         updateAllParentUpdatedAt(dbFileNode.getParentId());
+        saveEvent(dbFileNode, ChangeType.CREATED);
         return FileNodeMapper.toDTO(fileNode);
     }
 
@@ -151,6 +158,7 @@ public class FileNodeService {
         FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), UUID.fromString(id))
                 .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
         repository.renameFile(name, fileNode.getId(), userPrincipal.getUserId());
+        saveEvent(fileNode, ChangeType.MODIFIED);
         updateAllParentUpdatedAt(fileNode.getParentId());
     }
 
@@ -168,6 +176,7 @@ public class FileNodeService {
             // TODO("Delete thumbnail and the actual file from S3 uploadBucket")
         }
 
+        saveEvent(fileNode, ChangeType.DELETED);
         repository.delete(fileNode);
         updateAllParentUpdatedAt(parentId);
     }
@@ -187,7 +196,7 @@ public class FileNodeService {
 
         // copy all descendants if the file is a folder
         copyFolderTree(userPrincipal.getUserId(), fileNode.getId(), dbFileNode.getId());
-
+        saveEvent(newFileNode, ChangeType.MODIFIED);
         // update modification date
         updateAllParentUpdatedAt(fileNode.getParentId());
         updateAllParentUpdatedAt(newParentId);
@@ -204,6 +213,7 @@ public class FileNodeService {
         fileNode.setParentId(UUID.fromString(newParentID)); // move the file node to a new parent (i.e., folder)
 
         FileNode dbFileNode = repository.save(fileNode);
+        saveEvent(dbFileNode, ChangeType.MOVED);
         updateAllParentUpdatedAt(fileNode.getParentId());
         updateAllParentUpdatedAt(dbFileNode.getParentId());
         return FileNodeMapper.toDTO(dbFileNode);
@@ -232,6 +242,7 @@ public class FileNodeService {
             fileNode.setName(folder);
             fileNode.setType("folder");
             repository.save(fileNode);
+            saveEvent(fileNode, ChangeType.CREATED);
         }
     }
 
@@ -306,6 +317,16 @@ public class FileNodeService {
         InputStream stream = minioService.getFileStream(fileNode.getObjectId());
         return AudioMetadataExtractor.extractMetadata(stream);
     }
+
+    private void saveEvent(FileNode fileNode, ChangeType eventType) {
+        FileChangeEvent event = new FileChangeEvent();
+        event.setFileId(fileNode.getId());
+        event.setParentId(fileNode.getParentId());
+        event.setUserId(fileNode.getUserId());
+        event.setEventType(eventType);
+        event.setSnapShotJson(FileChangeEventMapper.toJson(fileNode));
+        eventRepository.save(event);
+    }
 }
 
 @Slf4j
@@ -314,6 +335,7 @@ public class FileNodeService {
 class Cml implements CommandLineRunner {
 
     private final FileNodeRepository repository;
+    private final FileChangeEventRepository eventRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -345,6 +367,7 @@ class Cml implements CommandLineRunner {
         generateFileTree(user.getId(), 25, 24, null);
         var allFiles = repository.findAll();
         log.info("All file node: {}", allFiles.size());
+        eventRepository.findAll().forEach(e -> log.info("------------------------------------ event: {}", e));
 
     }
 
@@ -361,6 +384,7 @@ class Cml implements CommandLineRunner {
             if (i <= folder) {
                 FileNode fileNode = newFile("folder", "Folder " + count, null, parentId, userId);
                 FileNode dbFileNode = repository.save(fileNode);
+                saveEvent(fileNode, ChangeType.CREATED);
                 folderIds.add(dbFileNode.getId());
             } else {
                 var mimeType = MimeTypeUtil.getRandomMimeType();
@@ -368,6 +392,7 @@ class Cml implements CommandLineRunner {
                 long fileSize = minSize + (long)(random.nextDouble() * (maxSize - minSize));
                 fileNode.setSize(fileSize);
                 repository.save(fileNode);
+                saveEvent(fileNode, ChangeType.CREATED);
             }
         }
 
@@ -391,5 +416,15 @@ class Cml implements CommandLineRunner {
         System.out.println("FileNode(id=" + fileNode.getId()
                 + ", parentId=" + fileNode.getParentId() + ", name=" + fileNode.getName()
                 + ", type=" + fileNode.getType() + ")");
+    }
+
+    private void saveEvent(FileNode fileNode, ChangeType eventType) {
+        FileChangeEvent event = new FileChangeEvent();
+        event.setFileId(fileNode.getId());
+        event.setParentId(fileNode.getParentId());
+        event.setUserId(fileNode.getUserId());
+        event.setEventType(eventType);
+        event.setSnapShotJson(FileChangeEventMapper.toJson(fileNode));
+        eventRepository.save(event);
     }
 }

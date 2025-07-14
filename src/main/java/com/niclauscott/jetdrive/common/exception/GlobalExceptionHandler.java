@@ -5,6 +5,7 @@ import com.niclauscott.jetdrive.auth_feature.exception.InvalidOrExpiredTokenExce
 import com.niclauscott.jetdrive.file_feature.common.exception.AudioMetaDataExtractionException;
 import com.niclauscott.jetdrive.file_feature.common.exception.CantUploadFileException;
 import com.niclauscott.jetdrive.file_feature.common.exception.FileNotFoundException;
+import com.niclauscott.jetdrive.file_feature.common.exception.ObjectMapperException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UncompletedUploadException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UploadNotSupportedException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UploadSessionNotFoundException;
@@ -20,6 +21,13 @@ import java.util.Map;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ObjectMapperException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ResponseEntity<Map<String, String>> handleObjectMapperException(ObjectMapperException e) {
+        Map<String, String> error = Map.of("message", e.getMessage());
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
 
     @ExceptionHandler(CantUploadFileException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
