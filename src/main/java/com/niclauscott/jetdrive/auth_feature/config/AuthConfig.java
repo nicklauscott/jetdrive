@@ -45,6 +45,7 @@ public class AuthConfig {
         http.authorizeHttpRequests(auth ->
                 auth.requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/v3/**").permitAll()
+                        .requestMatchers("/public/**").permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD).permitAll()
                         .anyRequest().authenticated()
          );
@@ -62,7 +63,6 @@ public class AuthConfig {
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
         configuration.setExposedHeaders(Arrays.asList("Content-Length", "Content-Range", "Accept-Ranges"));
-
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;

@@ -41,7 +41,6 @@ dependencies {
 	runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
 
 	implementation("software.amazon.awssdk:s3:2.20.90")
-	implementation("io.minio:minio:8.5.17")
 
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.springframework.boot:spring-boot-starter-security")

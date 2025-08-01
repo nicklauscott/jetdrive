@@ -10,6 +10,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.lang.NonNull;
@@ -23,6 +24,7 @@ import java.util.Optional;
 
 @Component
 @AllArgsConstructor
+@Slf4j
 public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
@@ -36,7 +38,9 @@ public class JwtFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         if (request.getRequestURI().startsWith("/auth/") || request.getRequestURI().startsWith("/auth/google/")
-                || request.getRequestURI().startsWith("/v3/") || request.getRequestURI().startsWith("/h2-console")) {
+                || request.getRequestURI().startsWith("/v3/") || request.getRequestURI().startsWith("/h2-console")
+                || request.getRequestURI().startsWith("/public/")
+        ) {
             filterChain.doFilter(request, response);
             return;
         }

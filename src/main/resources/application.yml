@@ -28,10 +28,10 @@ spring:
       ddl-auto: create-drop
 
 jwt:
-  secret: ZkdJcFJ6N1JPdTVPZjB4c0RqNDNUQ0JuS1NLaHU0ZFM= #{JWT_SECRET_V2_BASE64}
+  secret: {JWT_SECRET_V2_BASE64}
 
 google:
-  clientId: 551260504895-mofqeookk23lmol3g8r9npjol9r03fm5.apps.googleusercontent.com #{GOOGLE_CLIENT_ID}
+  clientId: {GOOGLE_CLIENT_ID}
 
 #logging:
 #  level:
@@ -39,3 +39,9 @@ google:
 
 server:
   port: 8001
+
+s3:
+  endpoint: {S3_ENDPOINT}
+  region: {S3_REGION}
+  access-key: {S3_ACCESS_KEY}
+  secret-key: {S3_SECRET_KEY}

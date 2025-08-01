@@ -3,11 +3,11 @@ package com.niclauscott.jetdrive.file_feature.upload.service;
 import com.niclauscott.jetdrive.common.model.UserPrincipal;
 import com.niclauscott.jetdrive.file_feature.common.constant.FileStorageProperties;
 import com.niclauscott.jetdrive.file_feature.common.exception.FileNodeOperationException;
-import com.niclauscott.jetdrive.file_feature.download.service.MinioService;
 import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileNodeDTO;
 import com.niclauscott.jetdrive.file_feature.file.repository.FileNodeRepository;
 import com.niclauscott.jetdrive.file_feature.file.service.FileNodeService;
 import com.niclauscott.jetdrive.file_feature.file.service.MimeTypeUtil;
+import com.niclauscott.jetdrive.file_feature.file.service.S3StorageService;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UncompletedUploadException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UploadNotSupportedException;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UploadSessionNotFoundException;
@@ -19,9 +19,9 @@ import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadStatus;
 import com.niclauscott.jetdrive.file_feature.upload.repository.UploadSessionRepository;
 import com.niclauscott.jetdrive.user_feature.model.entities.User;
 import com.niclauscott.jetdrive.user_feature.repository.UserRepository;
-import io.minio.GetObjectArgs;
-import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
+//import io.minio.MinioClient;
+//import io.minio.GetObjectArgs;
+//import io.minio.PutObjectArgs;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,7 +38,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -53,8 +52,7 @@ public class UploadService {
     private final UserRepository userRepository;
     private final FileNodeRepository fileNodeRepository;
     private final FileNodeService fileNodeService;
-    private final MinioClient minioClient;
-    private final MinioService minioService;
+    private final S3StorageService storageService;
     private final FileStorageProperties fileStorageProperties;
 
     public String uploadProfilePicture(MultipartFile file, String userId, String oldProfilePicture)
@@ -64,8 +62,8 @@ public class UploadService {
             throw new FileNodeOperationException("File type not supported");
         }
         String format = mimeType.split("/")[1];
-        String directory = userId.replace(".", "_");
-        String compressedObjectName = directory + "/" +  "profile." + format;
+        String userEmail = userId.replace(".", "_");
+        String compressedObjectName = userEmail + "_profile." + format;
 
         BufferedImage image = ImageIO.read(file.getInputStream());
         ByteArrayOutputStream compressedOut = new ByteArrayOutputStream();
@@ -77,8 +75,8 @@ public class UploadService {
 
         byte[] compressedBytes = compressedOut.toByteArray();
         ByteArrayInputStream inputStream = new ByteArrayInputStream(compressedBytes);
-        if (oldProfilePicture != null) minioService.deleteProfilePicture(oldProfilePicture);
-        minioService.uploadProfilePicture(inputStream, compressedBytes.length, -1, compressedObjectName);
+        if (oldProfilePicture != null) storageService.deleteProfilePicture(oldProfilePicture);
+        storageService.uploadProfilePicture(inputStream, compressedBytes.length, compressedObjectName);
         return "profile-picture/" + compressedObjectName;
     }
 
@@ -125,15 +123,9 @@ public class UploadService {
         String eTag = UUID.randomUUID().toString();
         try {
             log.info("Saving new chunk: part: {}", partNumber);
-            minioClient.putObject(
-                    PutObjectArgs.builder()
-                            .bucket(fileStorageProperties.uploadBucket())
-                            .object(session.getObjectKey() + ".part" + partNumber)
-                            .stream(inputStream, range.end - range.start + 1, -1)
-                            .build()
-            );
+            storageService.uploadChunkToS3(session.getObjectKey(), partNumber, inputStream, range.start, range.end);
         } catch (Exception e) {
-            throw new IOException("Failed to upload chunk to Minio", e);
+            throw new IOException("Failed to upload chunk to s3", e);
         }
 
         session.getUploadedParts().put(partNumber, eTag);
@@ -157,42 +149,7 @@ public class UploadService {
         }
 
         String finalObject = session.getObjectKey();
-
-        try (ByteArrayOutputStream combined = new ByteArrayOutputStream()) {
-            for (int i : session.getUploadedParts().keySet().stream().sorted().toList()) {
-                try (InputStream in = minioClient.getObject(
-                        GetObjectArgs.builder()
-                                .bucket(fileStorageProperties.uploadBucket())
-                                .object(finalObject + ".part" + i)
-                                .build()
-                )) {
-                    in.transferTo(combined);
-                }
-            }
-
-            minioClient.putObject(
-                    PutObjectArgs.builder()
-                            .bucket(fileStorageProperties.uploadBucket())
-                            .object(finalObject)
-                            .stream(new ByteArrayInputStream(combined.toByteArray()), combined.size(), -1)
-                            .build()
-            );
-
-            for (int i : session.getUploadedParts().keySet()) {
-                try {
-                    minioClient.removeObject(
-                            io.minio.RemoveObjectArgs.builder()
-                                    .bucket(fileStorageProperties.uploadBucket())
-                                    .object(finalObject + ".part" + i)
-                                    .build()
-                    );
-                } catch (Exception e) {
-                    log.info("Failed to delete chunk part {}  {}", i, e.getMessage());
-                }
-            }
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to assemble and complete upload", e);
-        }
+        storageService.mergeChunksAndUpload(finalObject, session);
 
         updateSession(uploadId);
         return fileNodeService.createFileNode(

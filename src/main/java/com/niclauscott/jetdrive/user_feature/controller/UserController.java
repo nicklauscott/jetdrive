@@ -7,8 +7,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -16,6 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/user")
 @Tag(name = "User", description = "Api for managing users")
 @AllArgsConstructor
+@Slf4j
 public class UserController {
 
     private final UserService service;

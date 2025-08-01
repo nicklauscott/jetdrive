@@ -1,9 +1,10 @@
 package com.niclauscott.jetdrive.file_feature.common.services;
 
+import com.niclauscott.jetdrive.file_feature.file.service.S3StorageService;
 import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadSession;
 import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadStatus;
 import com.niclauscott.jetdrive.file_feature.upload.repository.UploadSessionRepository;
-import io.minio.MinioClient;
+//import io.minio.MinioClient;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,10 +19,9 @@ import java.util.List;
 public class ScheduleService {
 
     private final UploadSessionRepository sessionRepository;
-    private final MinioClient minioClient;
-    private final String bucket = "upload";
+    private final S3StorageService storageService;
 
-    @Scheduled(cron = "0 0 * * * *") // runs every hour
+    @Scheduled(cron = "0 0 * * * *")
     @Transactional
     public void cleanupStaleUploads() {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(1);
@@ -30,20 +30,7 @@ public class ScheduleService {
                 .findByStatusAndLastUpdatedAtBefore(UploadStatus.IN_PROGRESS, cutoff);
 
         for (UploadSession session : staleSessions) {
-            String finalObject = session.getObjectKey();
-            for (int i : session.getUploadedParts().keySet()) {
-                try {
-                    minioClient.removeObject(
-                            io.minio.RemoveObjectArgs.builder()
-                                    .bucket(bucket)
-                                    .object(finalObject + ".part" + i)
-                                    .build()
-                    );
-                } catch (Exception e) {
-                    log.info("Failed to delete chunk part {}  {}", i, e.getMessage());
-                }
-            }
-
+            storageService.removeIncompleteUploads(session);
             session.setStatus(UploadStatus.CANCELLED);
             sessionRepository.save(session);
         }

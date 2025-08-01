@@ -3,7 +3,6 @@ package com.niclauscott.jetdrive.file_feature.file.service;
 import com.niclauscott.jetdrive.common.model.UserPrincipal;
 import com.niclauscott.jetdrive.file_feature.common.exception.FileNodeOperationException;
 import com.niclauscott.jetdrive.file_feature.common.exception.FileNotFoundException;
-import com.niclauscott.jetdrive.file_feature.download.service.MinioService;
 import com.niclauscott.jetdrive.file_feature.file.model.constant.DefaultFileNodes;
 import com.niclauscott.jetdrive.file_feature.file.model.dtos.*;
 import com.niclauscott.jetdrive.file_feature.file.model.entities.ChangeType;
@@ -28,6 +27,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import java.io.InputStream;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -40,7 +43,7 @@ public class FileNodeService {
     private final FileNodeRepository repository;
     private final FileChangeEventRepository eventRepository;
     private final UserRepository userRepository;
-    private final MinioService minioService;
+    private final S3StorageService storageService;
 
     public UserFileStatsResponseDTO getUserStats() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
@@ -90,7 +93,7 @@ public class FileNodeService {
         FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), fileId)
                 .orElseThrow(() -> new FileNotFoundException("No file with the id found"));
         if (fileNode.getObjectId() == null) throw new FileNotFoundException("No file with the id found");
-        return minioService.getPresignedUrl(fileNode.getObjectId());
+        return storageService.getPresignedUrl(fileNode.getObjectId());
     }
 
     public Optional<FileNodeTreeResponse> getChildren(UUID parentId, Optional<LocalDateTime> ifUpdatedSince) {
@@ -343,7 +346,7 @@ public class FileNodeService {
         FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), fileId)
                 .orElseThrow(() -> new FileNotFoundException("No file with the id found"));
         if (fileNode.getObjectId() == null) throw new FileNotFoundException("No file with the id found");
-        InputStream stream = minioService.getFileStream(fileNode.getObjectId());
+        InputStream stream = storageService.getFileStream(fileNode.getObjectId());
         return AudioMetadataExtractor.extractMetadata(stream);
     }
 
@@ -396,6 +399,7 @@ class Cml implements CommandLineRunner {
         user.setLastName("Johnson");
         user.setPasswordHash(passwordEncoder.encode("300819Nas"));
         user.setAuthType("password");
+        user.setPicture("http://" + getHostAddress() + ":8001/public/profile-picture/info@abc_com_profile.jpeg");
         User dbUser = userRepository.save(user);
 
         FileNode fileNode = new FileNode();
@@ -478,5 +482,31 @@ class Cml implements CommandLineRunner {
         if (totalSpaceLong - usedSpaceBytes < fileSizeBytes) {
             throw new FileNodeOperationException("You don't have enough space to perform this action");
         }
+    }
+
+    private String getHostAddress() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface iface = interfaces.nextElement();
+
+                // Ignore down or loopback interfaces
+                if (!iface.isUp() || iface.isLoopback()) continue;
+
+                Enumeration<InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+
+                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
+                        return addr.getHostAddress();
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            log.info("------------------------- Error: {}", e.getMessage());
+            return  "";
+        }
+        return "";
     }
 }

@@ -29,7 +29,7 @@ public class FileNodeController {
     }
 
     @GetMapping
-    public ResponseEntity<?> getRootFiles2() {
+    public ResponseEntity<?> getRootFiles() {
         Optional<FileNodeTreeResponse> response = service.getFiles();
         return response
                 .map(ResponseEntity::ok)
@@ -56,7 +56,6 @@ public class FileNodeController {
         AudioMetadata response = service.getMetadata(fileId);
         return ResponseEntity.ok(response);
     }
-
 
     @GetMapping("/{parent_Id}/children")
     @Operation(description = "Get file node children")
