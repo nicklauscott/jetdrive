@@ -1,7 +1,7 @@
 package com.niclauscott.jetdrive.file_feature.file.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.niclauscott.jetdrive.common.model.UserPrincipal;
+import com.niclauscott.jetdrive.file_feature.common.exception.FileNodeOperationException;
 import com.niclauscott.jetdrive.file_feature.common.exception.FileNotFoundException;
 import com.niclauscott.jetdrive.file_feature.download.service.MinioService;
 import com.niclauscott.jetdrive.file_feature.file.model.constant.DefaultFileNodes;
@@ -13,6 +13,7 @@ import com.niclauscott.jetdrive.file_feature.file.model.mapper.FileChangeEventMa
 import com.niclauscott.jetdrive.file_feature.file.model.mapper.FileNodeMapper;
 import com.niclauscott.jetdrive.file_feature.file.repository.FileChangeEventRepository;
 import com.niclauscott.jetdrive.file_feature.file.repository.FileNodeRepository;
+import com.niclauscott.jetdrive.user_feature.exception.UserDoesntExistException;
 import com.niclauscott.jetdrive.user_feature.model.entities.User;
 import com.niclauscott.jetdrive.user_feature.repository.UserRepository;
 import jakarta.transaction.Transactional;
@@ -26,8 +27,6 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
-
-import java.io.File;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -134,6 +133,12 @@ public class FileNodeService {
     ) {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
+
+        var user = userRepository.findById(userPrincipal.getUserId())
+                .orElseThrow(() -> new UserDoesntExistException("No user with the id found"));
+
+        if (Objects.equals(type, "file")) hasEnoughSpace(userPrincipal.getUserId(), user.getQuotaLimitMb(),  size);
+
         FileNode fileNode = new FileNode();
         fileNode.setUserId(userPrincipal.getUserId());
         if (parentId != null) fileNode.setParentId(UUID.fromString(parentId));
@@ -146,8 +151,9 @@ public class FileNodeService {
         if (thumbnailPath != null) fileNode.setThumbnailPath(thumbnailPath);
 
         FileNode dbFileNode = repository.save(fileNode);
+        // ============ incrementUserUsedSpace(userPrincipal.getUserId(), fileNode.getSize());
         updateAllParentUpdatedAt(dbFileNode.getParentId());
-        saveEvent(dbFileNode, ChangeType.CREATED);
+        saveEvent(dbFileNode, null, ChangeType.CREATED);
         return FileNodeMapper.toDTO(fileNode);
     }
 
@@ -158,7 +164,7 @@ public class FileNodeService {
         FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), UUID.fromString(id))
                 .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
         repository.renameFile(name, fileNode.getId(), userPrincipal.getUserId());
-        saveEvent(fileNode, ChangeType.MODIFIED);
+        saveEvent(fileNode,  null, ChangeType.MODIFIED);
         updateAllParentUpdatedAt(fileNode.getParentId());
     }
 
@@ -169,6 +175,9 @@ public class FileNodeService {
         FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), id)
                 .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
 
+        // doesn't work with H2 db
+        //isBelowMaxFileCount(fileNode.getId()); // uncomment later
+
         UUID parentId = fileNode.getParentId();
         if (Objects.equals(fileNode.getType(), "folder")) {
             deleteFolderWithS3Cleanup(fileNode.getId());
@@ -176,8 +185,9 @@ public class FileNodeService {
             // TODO("Delete thumbnail and the actual file from S3 uploadBucket")
         }
 
-        saveEvent(fileNode, ChangeType.DELETED);
+        saveEvent(fileNode, null, ChangeType.DELETED);
         repository.delete(fileNode);
+        // ============  decrementUserUsedSpace(userPrincipal.getUserId(), fileNode.getSize());
         updateAllParentUpdatedAt(parentId);
     }
 
@@ -185,8 +195,19 @@ public class FileNodeService {
     public FileNodeDTO copyFileNode(String id, String parentId) {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
+
+        var user = userRepository.findById(userPrincipal.getUserId())
+                .orElseThrow(() -> new UserDoesntExistException("No user with the id found"));
+
         FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), UUID.fromString(id))
                 .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
+
+
+
+        // doesn't work with H2 db
+        //isBelowMaxFileCount(fileNode.getId()); // uncomment later
+
+        hasEnoughSpace(userPrincipal.getUserId(), user.getQuotaLimitMb(), fileNode.getSize());
 
         // create a copy of the old file node
         FileNode newFileNode = FileNodeMapper.createCopy(fileNode);
@@ -196,7 +217,7 @@ public class FileNodeService {
 
         // copy all descendants if the file is a folder
         copyFolderTree(userPrincipal.getUserId(), fileNode.getId(), dbFileNode.getId());
-        saveEvent(newFileNode, ChangeType.MODIFIED);
+        saveEvent(newFileNode, fileNode.getParentId(), ChangeType.MODIFIED);
         // update modification date
         updateAllParentUpdatedAt(fileNode.getParentId());
         updateAllParentUpdatedAt(newParentId);
@@ -212,8 +233,11 @@ public class FileNodeService {
                 .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
         fileNode.setParentId(UUID.fromString(newParentID)); // move the file node to a new parent (i.e., folder)
 
+        // doesn't work with H2 db
+        //isBelowMaxFileCount(fileNode.getId()); // uncomment later
+
         FileNode dbFileNode = repository.save(fileNode);
-        saveEvent(dbFileNode, ChangeType.MOVED);
+        saveEvent(dbFileNode, null, ChangeType.MOVED);
         updateAllParentUpdatedAt(fileNode.getParentId());
         updateAllParentUpdatedAt(dbFileNode.getParentId());
         return FileNodeMapper.toDTO(dbFileNode);
@@ -242,7 +266,7 @@ public class FileNodeService {
             fileNode.setName(folder);
             fileNode.setType("folder");
             repository.save(fileNode);
-            saveEvent(fileNode, ChangeType.CREATED);
+            saveEvent(fileNode, null, ChangeType.CREATED);
         }
     }
 
@@ -262,10 +286,13 @@ public class FileNodeService {
 
     @Transactional
     public void copyFolderTree(UUID userId, UUID sourceFolderId, UUID newFolderId) {
+        log.info("............................... HERE");
         Queue<Pair<UUID, UUID>> queue = new ArrayDeque<>();
         queue.add(Pair.of(sourceFolderId, newFolderId));
 
         while (!queue.isEmpty()) {
+            var user = userRepository.findById(userId)
+                    .orElseThrow(() -> new UserDoesntExistException("No user with the id found"));
             Pair<UUID, UUID> current = queue.poll();
             UUID from = current.getLeft();
             UUID to = current.getRight();
@@ -286,7 +313,9 @@ public class FileNodeService {
                     copy.setObjectId(null);
                 }
 
+
                 FileNode savedCopy = repository.save(copy);
+                hasEnoughSpace(user.getId(), user.getQuotaLimitMb(), savedCopy.getSize());
 
                 if (Objects.equals(child.getType(), "folder")) {
                     queue.add(Pair.of(child.getId(), savedCopy.getId())); // enqueue for further copy
@@ -318,14 +347,31 @@ public class FileNodeService {
         return AudioMetadataExtractor.extractMetadata(stream);
     }
 
-    private void saveEvent(FileNode fileNode, ChangeType eventType) {
+    private void saveEvent(FileNode fileNode, UUID oldParentId, ChangeType eventType) {
         FileChangeEvent event = new FileChangeEvent();
         event.setFileId(fileNode.getId());
         event.setParentId(fileNode.getParentId());
+        event.setOldParentId(oldParentId);
         event.setUserId(fileNode.getUserId());
         event.setEventType(eventType);
-        event.setSnapShotJson(FileChangeEventMapper.toJson(fileNode));
+        event.setSnapShotJson(FileChangeEventMapper.toJson(FileNodeMapper.toDTO(fileNode)));
         eventRepository.save(event);
+    }
+
+    private void isBelowMaxFileCount(UUID fileId) {
+        var descendants = repository.findAllDescendants(fileId);
+        if (descendants.size() > 100) {
+            throw new FileNodeOperationException("Too many items to process at once");
+        }
+    }
+
+    private void hasEnoughSpace(UUID userId, long totalSpaceMb, long fileSizeBytes) {
+        long totalSpaceLong = totalSpaceMb * 1024 * 1034;
+        long usedSpaceBytes = repository.getTotalStorageUsed(userId);
+        log.info("-------------------------- totalSpaceLong: {} -> usedSpaceBytes: {} -> availableSpace: {} -> fileSizeBytes: {}", totalSpaceLong, usedSpaceBytes, totalSpaceLong - usedSpaceBytes, fileSizeBytes);
+        if (totalSpaceLong - usedSpaceBytes < fileSizeBytes) {
+            throw new FileNodeOperationException("You don't have enough space to perform this action");
+        }
     }
 }
 
@@ -360,21 +406,18 @@ class Cml implements CommandLineRunner {
         fileNode.setMimeType("video/mp4");
         fileNode.setSize(Long.parseLong("56405497"));
         fileNode.setHasThumbnail(false);
+        hasEnoughSpace(user.getId(), 1024, fileNode.getSize());
         FileNode dbfileNode = repository.save(fileNode);
 
         log.info("Saved file node: {}", dbfileNode);
 
-        generateFileTree(user.getId(), 25, 24, null);
-        var allFiles = repository.findAll();
-        log.info("All file node: {}", allFiles.size());
-        eventRepository.findAll().forEach(e -> log.info("------------------------------------ event: {}", e));
-
+        generateFileTree(user.getId(), 10, 8, null);
     }
 
     private final AtomicInteger num = new AtomicInteger();
     private void generateFileTree(UUID userId, int size, int fileRatio, UUID parentId) {
-        long minSize = 5L * 1024 * 1024; // 1MB
-        long maxSize = 10L * 1024 * 1024; // 5MB
+        long minSize = 20L * 1024 * 1024;
+        long maxSize = 25L * 1024 * 1024;
 
         ArrayList<UUID> folderIds = new ArrayList<>();
         int folder = size - fileRatio;
@@ -391,6 +434,7 @@ class Cml implements CommandLineRunner {
                 FileNode fileNode = newFile("file", "File " + count, mimeType, parentId, userId);
                 long fileSize = minSize + (long)(random.nextDouble() * (maxSize - minSize));
                 fileNode.setSize(fileSize);
+                hasEnoughSpace(userId, 1024, fileSize);
                 repository.save(fileNode);
                 saveEvent(fileNode, ChangeType.CREATED);
             }
@@ -424,7 +468,15 @@ class Cml implements CommandLineRunner {
         event.setParentId(fileNode.getParentId());
         event.setUserId(fileNode.getUserId());
         event.setEventType(eventType);
-        event.setSnapShotJson(FileChangeEventMapper.toJson(fileNode));
+        event.setSnapShotJson(FileChangeEventMapper.toJson(FileNodeMapper.toDTO(fileNode)));
         eventRepository.save(event);
+    }
+
+    private void hasEnoughSpace(UUID userId, long totalSpaceMb, long fileSizeBytes) {
+        long totalSpaceLong = totalSpaceMb * 1024 * 1034;
+        long usedSpaceBytes = repository.getTotalStorageUsed(userId);
+        if (totalSpaceLong - usedSpaceBytes < fileSizeBytes) {
+            throw new FileNodeOperationException("You don't have enough space to perform this action");
+        }
     }
 }

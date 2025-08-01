@@ -12,6 +12,7 @@ import java.util.UUID;
 public class FileChangeEventDTO {
     public UUID fileId;
     public UUID parentId;
+    public UUID oldParentId;
     public ChangeType eventType;
     public LocalDateTime timeStamp;
     public String snapShotJson;

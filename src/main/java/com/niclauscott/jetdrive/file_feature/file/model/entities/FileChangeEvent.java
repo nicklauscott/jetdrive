@@ -21,6 +21,7 @@ public class FileChangeEvent {
 
     public UUID fileId;
     public UUID parentId;
+    public UUID oldParentId;
 
     public LocalDateTime timeStamp = LocalDateTime.now();
 

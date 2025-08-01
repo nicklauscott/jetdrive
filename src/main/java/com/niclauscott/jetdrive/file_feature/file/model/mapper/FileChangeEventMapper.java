@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.niclauscott.jetdrive.file_feature.common.exception.ObjectMapperException;
 import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileChangeEventDTO;
+import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileNodeDTO;
 import com.niclauscott.jetdrive.file_feature.file.model.entities.FileChangeEvent;
 import com.niclauscott.jetdrive.file_feature.file.model.entities.FileNode;
 
@@ -19,13 +20,14 @@ public class FileChangeEventMapper {
         return new FileChangeEventDTO(
                 fileChangeEvent.fileId,
                 fileChangeEvent.parentId,
+                fileChangeEvent.oldParentId,
                 fileChangeEvent.eventType,
                 fileChangeEvent.timeStamp,
                 fileChangeEvent.snapShotJson
         );
     }
 
-    public static String toJson(FileNode fileNode) {
+    public static String toJson(FileNodeDTO fileNode) {
         try {
             return objectMapper.writeValueAsString(fileNode);
         } catch (RuntimeException | JsonProcessingException e) {

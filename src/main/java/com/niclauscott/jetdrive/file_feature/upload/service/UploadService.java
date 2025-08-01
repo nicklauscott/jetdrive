@@ -2,9 +2,10 @@ package com.niclauscott.jetdrive.file_feature.upload.service;
 
 import com.niclauscott.jetdrive.common.model.UserPrincipal;
 import com.niclauscott.jetdrive.file_feature.common.constant.FileStorageProperties;
-import com.niclauscott.jetdrive.file_feature.common.exception.CantUploadFileException;
+import com.niclauscott.jetdrive.file_feature.common.exception.FileNodeOperationException;
 import com.niclauscott.jetdrive.file_feature.download.service.MinioService;
 import com.niclauscott.jetdrive.file_feature.file.model.dtos.FileNodeDTO;
+import com.niclauscott.jetdrive.file_feature.file.repository.FileNodeRepository;
 import com.niclauscott.jetdrive.file_feature.file.service.FileNodeService;
 import com.niclauscott.jetdrive.file_feature.file.service.MimeTypeUtil;
 import com.niclauscott.jetdrive.file_feature.upload.exception.UncompletedUploadException;
@@ -16,6 +17,7 @@ import com.niclauscott.jetdrive.file_feature.upload.model.dtos.UploadInitiateRes
 import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadSession;
 import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadStatus;
 import com.niclauscott.jetdrive.file_feature.upload.repository.UploadSessionRepository;
+import com.niclauscott.jetdrive.user_feature.model.entities.User;
 import com.niclauscott.jetdrive.user_feature.repository.UserRepository;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
@@ -25,6 +27,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.coobird.thumbnailator.Thumbnails;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import javax.imageio.ImageIO;
@@ -48,6 +51,7 @@ public class UploadService {
 
     private final UploadSessionRepository sessionRepository;
     private final UserRepository userRepository;
+    private final FileNodeRepository fileNodeRepository;
     private final FileNodeService fileNodeService;
     private final MinioClient minioClient;
     private final MinioService minioService;
@@ -57,15 +61,13 @@ public class UploadService {
             throws IOException {
         String mimeType = MimeTypeUtil.getMimeTypeByExtension(Objects.requireNonNull(file.getOriginalFilename()));
         if (!Objects.equals(mimeType.split("/")[0], "image")) {
-            throw new CantUploadFileException("File type not supported");
+            throw new FileNodeOperationException("File type not supported");
         }
         String format = mimeType.split("/")[1];
-        String compressedObjectName = userId.replace(".", "_") + "." + format;
+        String directory = userId.replace(".", "_");
+        String compressedObjectName = directory + "/" +  "profile." + format;
 
-        // Convert MultipartFile to BufferedImage
         BufferedImage image = ImageIO.read(file.getInputStream());
-
-        // Compress image to ByteArrayOutputStream
         ByteArrayOutputStream compressedOut = new ByteArrayOutputStream();
         Thumbnails.of(image)
                 .scale(0.6)
@@ -75,11 +77,7 @@ public class UploadService {
 
         byte[] compressedBytes = compressedOut.toByteArray();
         ByteArrayInputStream inputStream = new ByteArrayInputStream(compressedBytes);
-
-        // delete the old picture
         if (oldProfilePicture != null) minioService.deleteProfilePicture(oldProfilePicture);
-
-        // Upload to MinIO
         minioService.uploadProfilePicture(inputStream, compressedBytes.length, -1, compressedObjectName);
         return "profile-picture/" + compressedObjectName;
     }
@@ -89,10 +87,9 @@ public class UploadService {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
 
-        int fileSizeMb = (int) ((int) Math.ceil(request.getFileSize()) / (1024.0 * 1024.0));
-        if (!userRepository.canUserUpload(userPrincipal.getUserId(), fileSizeMb)) {
-            throw new CantUploadFileException("You can't upload at the moment");
-        }
+        User user  = userRepository.findById(userPrincipal.getUserId())
+                        .orElseThrow(() -> new UsernameNotFoundException("Something went wrong. try again later"));
+        hasEnoughSpace(userPrincipal.getUserId(),user.getQuotaLimitMb(), request.getFileSize());
 
         UploadSession session = saveUploadSession(
                 userPrincipal.getUserId(),
@@ -256,5 +253,13 @@ public class UploadService {
     }
 
     private record Range(long start, long end) {}
+
+    private void hasEnoughSpace(UUID userId, int totalSpaceMb, long fileSizeBytes) {
+        long totalSpaceLong = ((long) totalSpaceMb) * 1024 * 1034;
+        long usedSpaceBytes = fileNodeRepository.getTotalStorageUsed(userId);
+        if (totalSpaceLong - usedSpaceBytes < fileSizeBytes) {
+            throw new FileNodeOperationException("You don't have enough space to perform this action");
+        }
+    }
 
 }

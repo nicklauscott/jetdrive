@@ -33,6 +33,7 @@ public class UserController {
     }
 
     @PostMapping
+    @Operation(description = "Upload profile picture")
     ResponseEntity<?> uploadProfilePicture(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) return ResponseEntity.badRequest().body("File is empty");
         service.upload(file);

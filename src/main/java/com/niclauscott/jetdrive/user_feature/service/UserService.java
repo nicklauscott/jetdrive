@@ -4,7 +4,7 @@ import com.niclauscott.jetdrive.common.model.UserPrincipal;
 import com.niclauscott.jetdrive.auth_feature.model.dtos.CreateUserRequestDTO;
 import com.niclauscott.jetdrive.common.model.dtos.UpdateUserRequestDTO;
 import com.niclauscott.jetdrive.common.model.dtos.UserResponseDTO;
-import com.niclauscott.jetdrive.file_feature.common.exception.CantUploadFileException;
+import com.niclauscott.jetdrive.file_feature.common.exception.FileNodeOperationException;
 import com.niclauscott.jetdrive.file_feature.file.service.FileNodeService;
 import com.niclauscott.jetdrive.file_feature.upload.service.UploadService;
 import com.niclauscott.jetdrive.user_feature.exception.UserAlreadyExistException;
@@ -18,7 +18,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-
 import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetAddress;
@@ -52,7 +51,7 @@ public class UserService {
             user.setPicture("http://" + address + ":9000/" + imagePath);
             repository.save(user);
         } catch (IOException e) {
-            throw new CantUploadFileException("Error occurred when uploading picture");
+            throw new FileNodeOperationException("Error occurred when uploading picture");
         }
     }
 
