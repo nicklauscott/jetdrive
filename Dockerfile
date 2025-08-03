@@ -1,30 +1,27 @@
-
-# ---------- Stage 1: Build ----------
 FROM gradle:8.5-jdk21 AS builder
 
 WORKDIR /app
 
-# Copy Gradle wrapper and build files first (to leverage Docker cache)
-COPY gradle ./gradle
+# Copy only what's needed first
+COPY gradle gradle
 COPY gradlew .
 COPY build.gradle.kts .
 COPY settings.gradle.kts .
 
-# Download dependencies to cache them
+# Download dependencies
 RUN ./gradlew dependencies --no-daemon
 
-# Now copy the full source
-COPY src ./src
+# Now copy the actual source code
+COPY . .
 
-# Build the application JAR
+# Build the JAR
 RUN ./gradlew clean bootJar --no-daemon
 
-# ---------- Stage 2: Run ----------
+# ---------- Stage 2 ----------
 FROM openjdk:21-jdk-slim AS runner
 
 WORKDIR /app
 
-# Copy built JAR from builder stage
 COPY --from=builder /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
