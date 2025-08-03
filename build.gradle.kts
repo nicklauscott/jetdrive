@@ -25,6 +25,10 @@ repositories {
 }
 
 dependencies {
+
+	implementation("org.flywaydb:flyway-core")
+	implementation("org.flywaydb:flyway-database-postgresql")
+
 	implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 
 	implementation("net.jthink:jaudiotagger:2.2.5")
