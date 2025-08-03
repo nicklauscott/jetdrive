@@ -177,8 +177,7 @@ public class FileNodeService {
         FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), id)
                 .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
 
-        // doesn't work with H2 db
-        //isBelowMaxFileCount(fileNode.getId()); // uncomment later
+        isBelowMaxFileCount(fileNode.getId());
 
         UUID parentId = fileNode.getParentId();
         if (Objects.equals(fileNode.getType(), "folder")) {
@@ -203,7 +202,7 @@ public class FileNodeService {
         FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), UUID.fromString(id))
                 .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
 
-        //isBelowMaxFileCount(fileNode.getId()); // uncomment later; doesn't work with H2 db
+        isBelowMaxFileCount(fileNode.getId());
 
         hasEnoughSpace(userPrincipal.getUserId(), user.getQuotaLimitMb(), fileNode.getSize());
 
@@ -369,7 +368,7 @@ public class FileNodeService {
 }
 
 @Slf4j
-@Component
+//@Component
 @AllArgsConstructor
 class Cml implements CommandLineRunner {
 
