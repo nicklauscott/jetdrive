@@ -203,23 +203,28 @@ public class FileNodeService {
         FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), UUID.fromString(id))
                 .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
 
-
-
-        // doesn't work with H2 db
-        //isBelowMaxFileCount(fileNode.getId()); // uncomment later
+        //isBelowMaxFileCount(fileNode.getId()); // uncomment later; doesn't work with H2 db
 
         hasEnoughSpace(userPrincipal.getUserId(), user.getQuotaLimitMb(), fileNode.getSize());
 
-        // create a copy of the old file node
         FileNode newFileNode = FileNodeMapper.createCopy(fileNode);
         var newParentId = parentId != null ? UUID.fromString(parentId) : null;
         newFileNode.setParentId(newParentId);
+
+        if (Objects.equals(newFileNode.getType(), "file")) {
+            var newObjectId = UUID.randomUUID() + "/" +  fileNode.getObjectId().split("/")[1];
+            storageService.copyObject(fileNode.getObjectId(), newObjectId);
+            newFileNode.setObjectId(newObjectId);
+        }
+
         FileNode dbFileNode = repository.save(newFileNode);
 
-        // copy all descendants if the file is a folder
-        copyFolderTree(userPrincipal.getUserId(), fileNode.getId(), dbFileNode.getId());
+        if (Objects.equals(newFileNode.getType(), "folder")) {
+            copyFolderTree(userPrincipal.getUserId(), fileNode.getId(), dbFileNode.getId());
+        }
+
+        // update modification date and file sync
         saveEvent(newFileNode, fileNode.getParentId(), ChangeType.MODIFIED);
-        // update modification date
         updateAllParentUpdatedAt(fileNode.getParentId());
         updateAllParentUpdatedAt(newParentId);
 
@@ -250,11 +255,10 @@ public class FileNodeService {
 
         for (FileNode node : allNodes) {
             if (Objects.equals(node.getType(), "file")) {
-                // minioService.deleteFile(node.getStoragePath());
+                storageService.deleteFile(node.getObjectId());
             }
         }
 
-        // Delete all metadata (can batch delete by IDs)
         List<UUID> allIds = allNodes.stream().map(FileNode::getId).toList();
         repository.deleteAllByIdInBatch(allIds);
     }
@@ -287,7 +291,6 @@ public class FileNodeService {
 
     @Transactional
     public void copyFolderTree(UUID userId, UUID sourceFolderId, UUID newFolderId) {
-        log.info("............................... HERE");
         Queue<Pair<UUID, UUID>> queue = new ArrayDeque<>();
         queue.add(Pair.of(sourceFolderId, newFolderId));
 
@@ -304,30 +307,20 @@ public class FileNodeService {
                 FileNode copy = FileNodeMapper.createCopy(child);
                 copy.setParentId(to);
 
-                // Generate new S3 path if it's a file
                 if (Objects.equals(child.getType(), "file")) {
-                    String newS3Path = generateNewS3Path(copy.getId(), child.getMimeType());
-                    copy.setObjectId(newS3Path);
-
-                    //minioService.copyObject(child.getStoragePath(), newS3Path); // Copy in S3
-                } else {
-                    copy.setObjectId(null);
-                }
-
+                    String newObjectId = UUID.randomUUID() + "/" +  child.getObjectId().split("/")[1];
+                    storageService.copyObject(child.getObjectId(), newObjectId);
+                    copy.setObjectId(newObjectId);
+                } else { copy.setObjectId(null); }
 
                 FileNode savedCopy = repository.save(copy);
                 hasEnoughSpace(user.getId(), user.getQuotaLimitMb(), savedCopy.getSize());
 
                 if (Objects.equals(child.getType(), "folder")) {
-                    queue.add(Pair.of(child.getId(), savedCopy.getId())); // enqueue for further copy
+                    queue.add(Pair.of(child.getId(), savedCopy.getId()));
                 }
             }
         }
-    }
-
-    public String generateNewS3Path(UUID fileId, String mimeType) {
-        String extension = MimeTypeUtil.getMimeTypeByExtension(mimeType);
-        return "uploads/" + fileId + (extension != null ? "." + extension : "");
     }
 
     public void deleteUserFiles(UUID userId) {
@@ -369,7 +362,6 @@ public class FileNodeService {
     private void hasEnoughSpace(UUID userId, long totalSpaceMb, long fileSizeBytes) {
         long totalSpaceLong = totalSpaceMb * 1024 * 1034;
         long usedSpaceBytes = repository.getTotalStorageUsed(userId);
-        log.info("-------------------------- totalSpaceLong: {} -> usedSpaceBytes: {} -> availableSpace: {} -> fileSizeBytes: {}", totalSpaceLong, usedSpaceBytes, totalSpaceLong - usedSpaceBytes, fileSizeBytes);
         if (totalSpaceLong - usedSpaceBytes < fileSizeBytes) {
             throw new FileNodeOperationException("You don't have enough space to perform this action");
         }
@@ -413,13 +405,13 @@ class Cml implements CommandLineRunner {
 
         log.info("Saved file node: {}", dbfileNode);
 
-        generateFileTree(user.getId(), 10, 8, null);
+        generateFileTree(user.getId(), 5, 4, null);
     }
 
     private final AtomicInteger num = new AtomicInteger();
     private void generateFileTree(UUID userId, int size, int fileRatio, UUID parentId) {
-        long minSize = 20L * 1024 * 1024;
-        long maxSize = 25L * 1024 * 1024;
+        long minSize = 2L * 1024 * 1024;
+        long maxSize = 3L * 1024 * 1024;
 
         ArrayList<UUID> folderIds = new ArrayList<>();
         int folder = size - fileRatio;

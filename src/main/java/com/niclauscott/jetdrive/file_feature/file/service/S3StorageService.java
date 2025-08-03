@@ -28,7 +28,6 @@ import java.util.UUID;
 public class S3StorageService {
 
     private FileStorageProperties fileStorageProperties;
-    private FileEncryptionService encryptionService;
     private final S3Client s3;
     private final S3Presigner s3Presigner;
 
@@ -73,13 +72,11 @@ public class S3StorageService {
                 }
             }
 
-            //byte[] encryptedData = encryptionService.encrypt(combined.toByteArray(), session.getUserId().toString(), fileId.toString());
             s3.putObject(PutObjectRequest.builder()
                             .bucket(fileStorageProperties.uploadBucket())
                             .key(finalObject)
                             .build(),
                     RequestBody.fromBytes(combined.toByteArray()));
-                    //RequestBody.fromBytes(encryptedData));
 
             for (int i : session.getUploadedParts().keySet()) {
                 try {
@@ -202,22 +199,18 @@ public class S3StorageService {
 
     public FileUrlResponseDTO getPresignedUrl(String objectName) {
         try {
-            // Duration the presigned URL is valid for
             Duration expiration = Duration.ofMinutes(5);
 
-            // Build the S3 request
             GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                     .bucket(fileStorageProperties.uploadBucket())
                     .key(objectName)
                     .build();
 
-            // Create presigned request
             GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
                     .getObjectRequest(getObjectRequest)
                     .signatureDuration(Duration.ofMinutes(5))
                     .build();
 
-            // Use S3Presigner to generate URL
             PresignedGetObjectRequest presignedRequest = s3Presigner.presignGetObject(presignRequest);
 
             return new FileUrlResponseDTO(

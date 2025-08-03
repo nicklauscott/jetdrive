@@ -36,7 +36,7 @@ public class User {
     private boolean isEnabled = true;
 
     @Column(name = "quota_limit_mb", nullable = false)
-    private Integer quotaLimitMb = 1024;
+    private Integer quotaLimitMb = 100;
 
     @Column(name = "used_space_mb", nullable = false)
     private Integer usedSpaceMb = 0;
