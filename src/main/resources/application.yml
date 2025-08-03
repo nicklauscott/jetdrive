@@ -2,3 +2,8 @@ spring:
   application:
     name: Jet Drive
 
+  profiles:
+    active: prod
+
+enc:
+  base64Key: ${BASE64_MASTER_KEY}
