@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @AllArgsConstructor
@@ -27,6 +28,7 @@ import java.time.LocalDateTime;
 public class S3StorageService {
 
     private FileStorageProperties fileStorageProperties;
+    private FileEncryptionService encryptionService;
     private final S3Client s3;
     private final S3Presigner s3Presigner;
 
@@ -56,7 +58,9 @@ public class S3StorageService {
         }
     }
 
-    public void mergeChunksAndUpload(String finalObject, UploadSession session) {
+    public void mergeChunksAndUpload(
+            String finalObject, UploadSession session, UUID fileId
+    ) {
         try (ByteArrayOutputStream combined = new ByteArrayOutputStream()) {
             for (int i : session.getUploadedParts().keySet().stream().sorted().toList()) {
                 GetObjectRequest getRequest = GetObjectRequest.builder()
@@ -69,11 +73,13 @@ public class S3StorageService {
                 }
             }
 
+            //byte[] encryptedData = encryptionService.encrypt(combined.toByteArray(), session.getUserId().toString(), fileId.toString());
             s3.putObject(PutObjectRequest.builder()
                             .bucket(fileStorageProperties.uploadBucket())
                             .key(finalObject)
                             .build(),
                     RequestBody.fromBytes(combined.toByteArray()));
+                    //RequestBody.fromBytes(encryptedData));
 
             for (int i : session.getUploadedParts().keySet()) {
                 try {

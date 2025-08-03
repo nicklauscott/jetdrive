@@ -154,7 +154,6 @@ public class FileNodeService {
         if (thumbnailPath != null) fileNode.setThumbnailPath(thumbnailPath);
 
         FileNode dbFileNode = repository.save(fileNode);
-        // ============ incrementUserUsedSpace(userPrincipal.getUserId(), fileNode.getSize());
         updateAllParentUpdatedAt(dbFileNode.getParentId());
         saveEvent(dbFileNode, null, ChangeType.CREATED);
         return FileNodeMapper.toDTO(fileNode);
@@ -185,12 +184,11 @@ public class FileNodeService {
         if (Objects.equals(fileNode.getType(), "folder")) {
             deleteFolderWithS3Cleanup(fileNode.getId());
         } else {
-            // TODO("Delete thumbnail and the actual file from S3 uploadBucket")
+            storageService.deleteFile(fileNode.getObjectId());
         }
 
         saveEvent(fileNode, null, ChangeType.DELETED);
         repository.delete(fileNode);
-        // ============  decrementUserUsedSpace(userPrincipal.getUserId(), fileNode.getSize());
         updateAllParentUpdatedAt(parentId);
     }
 

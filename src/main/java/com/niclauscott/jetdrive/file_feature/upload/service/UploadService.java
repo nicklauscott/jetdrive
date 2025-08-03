@@ -19,9 +19,6 @@ import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadStatus;
 import com.niclauscott.jetdrive.file_feature.upload.repository.UploadSessionRepository;
 import com.niclauscott.jetdrive.user_feature.model.entities.User;
 import com.niclauscott.jetdrive.user_feature.repository.UserRepository;
-//import io.minio.MinioClient;
-//import io.minio.GetObjectArgs;
-//import io.minio.PutObjectArgs;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -99,7 +96,7 @@ public class UploadService {
         String uploadId = UUID.randomUUID().toString();
 
         session.setObjectKey(objectName);
-        session.setMinioUploadId(uploadId);
+        session.setS3UploadId(uploadId);
         return new UploadInitiateResponse(session.getId(), fileStorageProperties.chunkSize());
     }
 
@@ -149,13 +146,14 @@ public class UploadService {
         }
 
         String finalObject = session.getObjectKey();
-        storageService.mergeChunksAndUpload(finalObject, session);
-
-        updateSession(uploadId);
-        return fileNodeService.createFileNode(
+        FileNodeDTO fileNode = fileNodeService.createFileNode(
                 session.getFileName(), "file", session.getParentId(), session.getTotalSize(),
                 session.getObjectKey(), session.isHasThumbnail(), session.getThumbnailPath()
         );
+        storageService.mergeChunksAndUpload(finalObject, session, fileNode.getId());
+
+        updateSession(uploadId);
+        return fileNode;
     }
 
     public UploadProgressResponse getUploadProgress(UUID uploadId) {

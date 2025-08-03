@@ -43,8 +43,8 @@ public class UploadSession {
     @Column(name = "object_key")
     private String objectKey;
 
-    @Column(name = "minio_upload_id")
-    private String minioUploadId;
+    @Column(name = "s3_upload_id")
+    private String s3UploadId;
 
     @ElementCollection
     @Column(name = "uploaded_chunks")

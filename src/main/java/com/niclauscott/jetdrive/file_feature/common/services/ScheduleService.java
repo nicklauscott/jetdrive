@@ -4,7 +4,6 @@ import com.niclauscott.jetdrive.file_feature.file.service.S3StorageService;
 import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadSession;
 import com.niclauscott.jetdrive.file_feature.upload.model.entities.UploadStatus;
 import com.niclauscott.jetdrive.file_feature.upload.repository.UploadSessionRepository;
-//import io.minio.MinioClient;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
