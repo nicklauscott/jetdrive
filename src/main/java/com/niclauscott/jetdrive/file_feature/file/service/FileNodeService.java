@@ -39,7 +39,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Service
 @AllArgsConstructor
 public class FileNodeService {
-
     private final FileNodeRepository repository;
     private final FileChangeEventRepository eventRepository;
     private final UserRepository userRepository;
