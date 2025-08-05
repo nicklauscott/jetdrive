@@ -213,7 +213,6 @@ public class FileNodeService {
             copyFolderTree(userPrincipal.getUserId(), fileNode.getId(), dbFileNode.getId());
         }
 
-        // update modification date and file sync
         saveEvent(newFileNode, fileNode.getParentId(), ChangeType.MODIFIED);
         updateAllParentUpdatedAt(fileNode.getParentId());
         updateAllParentUpdatedAt(newParentId);
@@ -227,10 +226,9 @@ public class FileNodeService {
         UserPrincipal userPrincipal = (UserPrincipal) auth.getPrincipal();
         FileNode fileNode = repository.findByUserIdAndId(userPrincipal.getUserId(), UUID.fromString(id))
                 .orElseThrow(() -> new FileNotFoundException("file with the id not found"));
-        fileNode.setParentId(UUID.fromString(newParentID)); // move the file node to a new parent (i.e., folder)
+        fileNode.setParentId(UUID.fromString(newParentID));
 
-        // doesn't work with H2 db
-        //isBelowMaxFileCount(fileNode.getId()); // uncomment later
+        isBelowMaxFileCount(fileNode.getId());
 
         FileNode dbFileNode = repository.save(fileNode);
         saveEvent(dbFileNode, null, ChangeType.MOVED);

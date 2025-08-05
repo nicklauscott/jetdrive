@@ -11,14 +11,10 @@ import com.niclauscott.jetdrive.user_feature.exception.UserAlreadyExistException
 import com.niclauscott.jetdrive.user_feature.exception.UserDoesntExistException;
 import com.niclauscott.jetdrive.user_feature.model.entities.User;
 import com.niclauscott.jetdrive.user_feature.repository.UserRepository;
-import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
-import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.env.Environment;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
@@ -51,7 +47,7 @@ public class UserService {
                oldImagePath = user.getPicture() != null ? user.getPicture().split("picture/")[1] : null;
             }
             String objectName = uploadService.uploadProfilePicture(file, user.getEmail(), oldImagePath);
-            //user.setPicture(baseUrl + "/public/" + objectName);
+            user.setPicture(appUrl + "/public/" + objectName);
             repository.save(user);
         } catch (IOException e) {
             throw new FileNodeOperationException("Error occurred when uploading picture");
