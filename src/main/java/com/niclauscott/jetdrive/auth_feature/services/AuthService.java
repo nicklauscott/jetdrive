@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
@@ -41,16 +42,25 @@ public class AuthService {
         if (!jwtService.validateAccessToken(requestDTO.getAccess()))
             throw new InvalidOrExpiredTokenException("Invalid or expired token");
         String userEmail = jwtService.getEmailFromToken(requestDTO.getAccess());
-        userService.getUserByEmail(userEmail)
-                .orElseThrow(() -> new InvalidOrExpiredTokenException("Invalid or expired token"));
+        try {
+            userService.getUserByEmail(userEmail)
+                    .orElseThrow(() -> new InvalidOrExpiredTokenException("Invalid or expired token"));
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Transactional
     public TokenPairResponseDTO login(@Valid LoginRequestDTO requestDTO) {
-       User user = userService.getUserByEmail(requestDTO.getEmail()).orElseThrow(() ->
-                 new BadCredentialsException("Bad credentials! check your email and password"));
+        User user = null;
+        try {
+            user = userService.getUserByEmail(requestDTO.getEmail()).orElseThrow(() ->
+                      new BadCredentialsException("Bad credentials! check your email and password"));
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
 
-       if (!user.getAuthType().equals("password"))
+        if (!user.getAuthType().equals("password"))
            throw new BadCredentialsException("Bad credentials! check your email and password");
 
        if (!passwordEncoder.matches(requestDTO.getPassword(), user.getPasswordHash()))
@@ -71,8 +81,12 @@ public class AuthService {
             throw new InvalidOrExpiredTokenException("Invalid or expired token");
 
         String userEmail = jwtService.getEmailFromToken(requestDTO.getRefresh());
-        userService.getUserByEmail(userEmail)
-                .orElseThrow(() -> new InvalidOrExpiredTokenException("Invalid or expired token"));
+        try {
+            userService.getUserByEmail(userEmail)
+                    .orElseThrow(() -> new InvalidOrExpiredTokenException("Invalid or expired token"));
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
 
         try {
             String hashToken = hashToken(requestDTO.getRefresh());

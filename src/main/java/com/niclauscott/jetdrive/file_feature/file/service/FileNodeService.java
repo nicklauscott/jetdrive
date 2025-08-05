@@ -367,7 +367,7 @@ public class FileNodeService {
 }
 
 @Slf4j
-//@Component
+@Component
 @AllArgsConstructor
 class Cml implements CommandLineRunner {
 
