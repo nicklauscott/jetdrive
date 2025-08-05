@@ -9,6 +9,7 @@ import com.niclauscott.jetdrive.auth_feature.model.dtos.GoogleLoginRequestDTO;
 import com.niclauscott.jetdrive.auth_feature.model.dtos.TokenPairResponseDTO;
 import com.niclauscott.jetdrive.user_feature.model.entities.User;
 import com.niclauscott.jetdrive.user_feature.service.UserService;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +31,14 @@ public class GoogleAuthService {
     private final UserService userService;
     private final JwtService jwtService;
 
+    @PostConstruct
+    public void init() {
+        System.out.println(".....................Google Client ID: " + googleClientId);
+        log.info(".....................Google Client ID: {}", googleClientId);
+
+    }
+
+
     public TokenPairResponseDTO login(GoogleLoginRequestDTO requestDTO) {
         try {
             String email = verifyIdToken(requestDTO.getAccessToken());
@@ -49,6 +58,9 @@ public class GoogleAuthService {
                 .build();
         if (idTokenString == null) throw new InvalidOrExpiredTokenException("Invalid Google auth token");
         GoogleIdToken idToken = verifier.verify(idTokenString);
+        if (idToken == null) {
+            throw new InvalidOrExpiredTokenException("Invalid Google auth token");
+        }
         GoogleIdToken.Payload payload = idToken.getPayload();
         String email = payload.getEmail();
         String name = (String) payload.get("name");

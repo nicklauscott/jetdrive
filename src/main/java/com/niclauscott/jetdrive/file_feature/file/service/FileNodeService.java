@@ -19,13 +19,21 @@ import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
+import org.springframework.boot.CommandLineRunner;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import java.io.InputStream;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
@@ -356,3 +364,135 @@ public class FileNodeService {
     }
 }
 
+@Slf4j
+@Component
+@AllArgsConstructor
+class Cml implements CommandLineRunner {
+
+    private final FileNodeRepository repository;
+    private final FileChangeEventRepository eventRepository;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    private final Random random = new Random();
+
+    @Transactional
+    @Override
+    public void run(String... args) throws Exception {
+        User user = new User();
+        user.setEmail("info@abc.com");
+        user.setFirstName("Garry");
+        user.setLastName("Johnson");
+        user.setPasswordHash(passwordEncoder.encode("300819Nas"));
+        user.setAuthType("password");
+        user.setPicture("http://" + getHostAddress() + ":8001/public/profile-picture/info@abc_com_profile.jpeg");
+        User dbUser = userRepository.save(user);
+
+        FileNode fileNode = new FileNode();
+        fileNode.setName("GET THE GIRL!!! - The Office - 8x19 - Group Reaction.mp4");
+        fileNode.setType("file");
+        fileNode.setUserId(dbUser.getId());
+        fileNode.setObjectId("add13922-5710-48a4-aef1-a5ed3631de5b/GET THE GIRL!!! - The Office - 8x19 - Group Reaction.mp4");
+        fileNode.setMimeType("video/mp4");
+        fileNode.setSize(Long.parseLong("56405497"));
+        fileNode.setHasThumbnail(false);
+        hasEnoughSpace(user.getId(), 1024, fileNode.getSize());
+        FileNode dbfileNode = repository.save(fileNode);
+
+        log.info("Saved file node: {}", dbfileNode);
+
+        generateFileTree(user.getId(), 5, 4, null);
+    }
+
+    private final AtomicInteger num = new AtomicInteger();
+    private void generateFileTree(UUID userId, int size, int fileRatio, UUID parentId) {
+        long minSize = 2L * 1024 * 1024;
+        long maxSize = 3L * 1024 * 1024;
+
+        ArrayList<UUID> folderIds = new ArrayList<>();
+        int folder = size - fileRatio;
+
+        for (int i = 1; i < size; i++) {
+            int count = num.incrementAndGet();
+            if (i <= folder) {
+                FileNode fileNode = newFile("folder", "Folder " + count, null, parentId, userId);
+                FileNode dbFileNode = repository.save(fileNode);
+                saveEvent(fileNode, ChangeType.CREATED);
+                folderIds.add(dbFileNode.getId());
+            } else {
+                var mimeType = MimeTypeUtil.getRandomMimeType();
+                FileNode fileNode = newFile("file", "File " + count, mimeType, parentId, userId);
+                long fileSize = minSize + (long)(random.nextDouble() * (maxSize - minSize));
+                fileNode.setSize(fileSize);
+                hasEnoughSpace(userId, 1024, fileSize);
+                repository.save(fileNode);
+                saveEvent(fileNode, ChangeType.CREATED);
+            }
+        }
+
+        folderIds.forEach(folderId -> {
+            generateFileTree(userId, size - 1,fileRatio + 1, folderId);
+        });
+
+    }
+
+    private FileNode newFile(String type, String name, String mimeType, UUID parentId, UUID userId) {
+        FileNode fileNode = new FileNode();
+        fileNode.setUserId(userId);
+        if (parentId != null) fileNode.setParentId(parentId);
+        fileNode.setName(name);
+        fileNode.setType(type);
+        fileNode.setMimeType(mimeType);
+        return fileNode;
+    }
+
+    public static void printFileNode(FileNode fileNode) {
+        System.out.println("FileNode(id=" + fileNode.getId()
+                + ", parentId=" + fileNode.getParentId() + ", name=" + fileNode.getName()
+                + ", type=" + fileNode.getType() + ")");
+    }
+
+    private void saveEvent(FileNode fileNode, ChangeType eventType) {
+        FileChangeEvent event = new FileChangeEvent();
+        event.setFileId(fileNode.getId());
+        event.setParentId(fileNode.getParentId());
+        event.setUserId(fileNode.getUserId());
+        event.setEventType(eventType);
+        event.setSnapShotJson(FileChangeEventMapper.toJson(FileNodeMapper.toDTO(fileNode)));
+        eventRepository.save(event);
+    }
+
+    private void hasEnoughSpace(UUID userId, long totalSpaceMb, long fileSizeBytes) {
+        long totalSpaceLong = totalSpaceMb * 1024 * 1034;
+        long usedSpaceBytes = repository.getTotalStorageUsed(userId);
+        if (totalSpaceLong - usedSpaceBytes < fileSizeBytes) {
+            throw new FileNodeOperationException("You don't have enough space to perform this action");
+        }
+    }
+
+    private String getHostAddress() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface iface = interfaces.nextElement();
+
+                // Ignore down or loopback interfaces
+                if (!iface.isUp() || iface.isLoopback()) continue;
+
+                Enumeration<InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+
+                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
+                        return addr.getHostAddress();
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            log.info("------------------------- Error: {}", e.getMessage());
+            return  "";
+        }
+        return "";
+    }
+}
