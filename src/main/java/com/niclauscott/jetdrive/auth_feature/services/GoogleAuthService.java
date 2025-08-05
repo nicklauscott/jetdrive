@@ -31,14 +31,6 @@ public class GoogleAuthService {
     private final UserService userService;
     private final JwtService jwtService;
 
-    @PostConstruct
-    public void init() {
-        System.out.println(".....................Google Client ID: " + googleClientId);
-        log.info(".....................Google Client ID: {}", googleClientId);
-
-    }
-
-
     public TokenPairResponseDTO login(GoogleLoginRequestDTO requestDTO) {
         try {
             String email = verifyIdToken(requestDTO.getAccessToken());
