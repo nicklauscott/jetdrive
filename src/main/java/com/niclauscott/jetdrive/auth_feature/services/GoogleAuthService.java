@@ -9,29 +9,26 @@ import com.niclauscott.jetdrive.auth_feature.model.dtos.GoogleLoginRequestDTO;
 import com.niclauscott.jetdrive.auth_feature.model.dtos.TokenPairResponseDTO;
 import com.niclauscott.jetdrive.user_feature.model.entities.User;
 import com.niclauscott.jetdrive.user_feature.service.UserService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Optional;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class GoogleAuthService {
+
+    @Value("${google.clientId}")
+    private String googleClientId;
 
     private final UserService userService;
     private final JwtService jwtService;
-    private final String googleClientId;
-
-    public GoogleAuthService(
-            @Value("${google.clientId}") String googleClientId, UserService userService, JwtService jwtService
-    ) {
-        this.userService = userService;
-        this.jwtService = jwtService;
-        this.googleClientId = googleClientId;
-    }
 
     public TokenPairResponseDTO login(GoogleLoginRequestDTO requestDTO) {
         try {
@@ -39,9 +36,8 @@ public class GoogleAuthService {
             String accessToken = jwtService.generateAccessToken(email);
             String refreshToken = jwtService.generateRefreshToken(email);
             return new TokenPairResponseDTO(accessToken, refreshToken);
-        } catch (GeneralSecurityException e) {
-            throw new RuntimeException(e);
-        } catch (IOException e) {
+        }
+        catch (GeneralSecurityException | IOException e) {
             throw new InvalidOrExpiredTokenException("Invalid Google auth token");
         }
     }
@@ -58,7 +54,12 @@ public class GoogleAuthService {
         String name = (String) payload.get("name");
         String picture = (String) payload.get("picture");
 
-        Optional<User> dbUser = userService.getUserByEmail(email);
+        Optional<User> dbUser;
+        try {
+            dbUser = userService.getUserByEmail(email);
+        } catch (SQLException e) {
+            throw new InvalidOrExpiredTokenException("Error login in with Google");
+        }
         if (dbUser.isPresent()) return email;
 
         User newUser = new User();
@@ -68,4 +69,5 @@ public class GoogleAuthService {
         newUser.setAuthType("google");
         return userService.createUser(newUser).getEmail();
     }
+
 }

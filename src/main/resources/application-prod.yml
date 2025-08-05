@@ -23,6 +23,9 @@ spring:
       max-file-size: 100MB
       max-request-size: 100MB
 
+app:
+  url: ${APP_BASE_URL}
+
 jwt:
   secret: ${JWT_SECRET_V2_BASE64}
 

@@ -6,38 +6,35 @@ import com.niclauscott.jetdrive.common.model.dtos.UpdateUserRequestDTO;
 import com.niclauscott.jetdrive.common.model.dtos.UserResponseDTO;
 import com.niclauscott.jetdrive.file_feature.common.exception.FileNodeOperationException;
 import com.niclauscott.jetdrive.file_feature.file.service.FileNodeService;
-import com.niclauscott.jetdrive.file_feature.file.service.S3StorageService;
 import com.niclauscott.jetdrive.file_feature.upload.service.UploadService;
 import com.niclauscott.jetdrive.user_feature.exception.UserAlreadyExistException;
 import com.niclauscott.jetdrive.user_feature.exception.UserDoesntExistException;
 import com.niclauscott.jetdrive.user_feature.model.entities.User;
 import com.niclauscott.jetdrive.user_feature.repository.UserRepository;
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.InputStreamResource;
-import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.core.ResponseInputStream;
-import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-
 import java.io.IOException;
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
-import java.util.Enumeration;
+import java.sql.SQLException;
 import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class UserService {
+
+    @Value("${app.url}")
+    private String appUrl;
 
     private final UserRepository repository;
     private final FileNodeService fileNodeService;
@@ -49,20 +46,19 @@ public class UserService {
         User user = repository.findByEmail(userPrincipal.getUsername())
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
         try {
-            String address = getHostAddress();
             String oldImagePath = null;
             if (Objects.equals(user.getAuthType(), "password")) {
                oldImagePath = user.getPicture() != null ? user.getPicture().split("picture/")[1] : null;
             }
             String objectName = uploadService.uploadProfilePicture(file, user.getEmail(), oldImagePath);
-            user.setPicture("http://" + address + ":8001/public/" + objectName);
+            //user.setPicture(baseUrl + "/public/" + objectName);
             repository.save(user);
         } catch (IOException e) {
             throw new FileNodeOperationException("Error occurred when uploading picture");
         }
     }
 
-    public Optional<User> getUserByEmail(String email) {
+    public Optional<User> getUserByEmail(String email) throws SQLException {
         return repository.findByEmail(email);
     }
 
@@ -122,31 +118,5 @@ public class UserService {
         repository.deleteByEmail(userPrincipal.getUsername());
     }
 
-    // -------------------------------------- Remove later -----------------------------------
-    private String getHostAddress() {
-        try {
-            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-
-            while (interfaces.hasMoreElements()) {
-                NetworkInterface iface = interfaces.nextElement();
-
-                // Ignore down or loopback interfaces
-                if (!iface.isUp() || iface.isLoopback()) continue;
-
-                Enumeration<InetAddress> addresses = iface.getInetAddresses();
-                while (addresses.hasMoreElements()) {
-                    InetAddress addr = addresses.nextElement();
-
-                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
-                        return addr.getHostAddress();
-                    }
-                }
-            }
-        } catch (SocketException e) {
-            log.info("------------------------- Error: {}", e.getMessage());
-            return  "";
-        }
-        return "";
-    }
 }
 
