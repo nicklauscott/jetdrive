@@ -175,10 +175,10 @@ public class FileNodeService {
             deleteFolderWithS3Cleanup(fileNode.getId());
         } else {
             storageService.deleteFile(fileNode.getObjectId());
+            repository.delete(fileNode);
         }
 
         saveEvent(fileNode, null, ChangeType.DELETED);
-        repository.delete(fileNode);
         updateAllParentUpdatedAt(parentId);
     }
 
