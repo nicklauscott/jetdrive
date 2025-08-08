@@ -52,7 +52,7 @@ public class AuthService {
 
     @Transactional
     public TokenPairResponseDTO login(@Valid LoginRequestDTO requestDTO) {
-        User user = null;
+        User user;
         try {
             user = userService.getUserByEmail(requestDTO.getEmail()).orElseThrow(() ->
                       new BadCredentialsException("Bad credentials! check your email and password"));
