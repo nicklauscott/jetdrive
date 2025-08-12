@@ -47,6 +47,7 @@ public class AuthConfig {
         http.authorizeHttpRequests(auth ->
                 auth.requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/v3/**").permitAll()
+                        .requestMatchers("/swagger-ui/**").permitAll()
                         .requestMatchers("/public/**").permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD).permitAll()
                         .anyRequest().authenticated()
