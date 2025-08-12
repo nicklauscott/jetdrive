@@ -40,3 +40,9 @@ s3:
 
 enc:
   base64Key: ${BASE64_MASTER_KEY}
+
+springdoc:
+  swagger-ui:
+    enabled: true
+  api-docs:
+    enabled: true
