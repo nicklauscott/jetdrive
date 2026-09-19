@@ -19,7 +19,7 @@ COPY src ./src
 RUN ./gradlew clean bootJar --no-daemon
 
 # ---------- Stage 2: Run ----------
-FROM openjdk:21-jdk-slim AS runner
+FROM eclipse-temurin:21-jre-jammy AS runner
 
 WORKDIR /app
 
